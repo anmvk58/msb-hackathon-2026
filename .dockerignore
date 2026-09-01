@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.greennode.json
+.agentbase/
+.agentbase-state.json
+*.credentials.json
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.git/
+venv/
+.venv/
+

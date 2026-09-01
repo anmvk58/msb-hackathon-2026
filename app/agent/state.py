@@ -1,0 +1,111 @@
+from enum import StrEnum
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from app.policy import PolicyDecision
+
+
+class AgentLifecycle(StrEnum):
+    INIT = "INIT"
+    CONTEXT_READY = "CONTEXT_READY"
+    SIGNAL_DETECTED = "SIGNAL_DETECTED"
+    ANALYSIS_READY = "ANALYSIS_READY"
+    RECOMMENDATION_READY = "RECOMMENDATION_READY"
+    ACTION_PREPARED = "ACTION_PREPARED"
+    WAITING_CONFIRMATION = "WAITING_CONFIRMATION"
+    EXECUTING = "EXECUTING"
+    EXECUTED = "EXECUTED"
+    MONITORING = "MONITORING"
+    FAILED = "FAILED"
+
+
+ALLOWED_TRANSITIONS: dict[AgentLifecycle, set[AgentLifecycle]] = {
+    AgentLifecycle.INIT: {AgentLifecycle.CONTEXT_READY, AgentLifecycle.FAILED},
+    AgentLifecycle.CONTEXT_READY: {
+        AgentLifecycle.SIGNAL_DETECTED,
+        AgentLifecycle.RECOMMENDATION_READY,
+        AgentLifecycle.FAILED,
+    },
+    AgentLifecycle.SIGNAL_DETECTED: {
+        AgentLifecycle.ANALYSIS_READY,
+        AgentLifecycle.FAILED,
+    },
+    AgentLifecycle.ANALYSIS_READY: {
+        AgentLifecycle.RECOMMENDATION_READY,
+        AgentLifecycle.FAILED,
+    },
+    AgentLifecycle.RECOMMENDATION_READY: {
+        AgentLifecycle.ACTION_PREPARED,
+        AgentLifecycle.MONITORING,
+        AgentLifecycle.FAILED,
+    },
+    AgentLifecycle.ACTION_PREPARED: {
+        AgentLifecycle.WAITING_CONFIRMATION,
+        AgentLifecycle.EXECUTING,
+        AgentLifecycle.FAILED,
+    },
+    AgentLifecycle.WAITING_CONFIRMATION: {
+        AgentLifecycle.EXECUTING,
+        AgentLifecycle.FAILED,
+    },
+    AgentLifecycle.EXECUTING: {AgentLifecycle.EXECUTED, AgentLifecycle.FAILED},
+    AgentLifecycle.EXECUTED: {AgentLifecycle.MONITORING},
+    AgentLifecycle.MONITORING: set(),
+    AgentLifecycle.FAILED: set(),
+}
+
+
+class EvidenceItem(BaseModel):
+    source: str
+    metric: str
+    value: Any
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class RecommendationOption(BaseModel):
+    option_id: str
+    title: str
+    description: str
+    action_type: str
+    parameters: dict[str, Any]
+    expected_impact: str
+
+
+class RecommendationResult(BaseModel):
+    problem: str
+    severity: str
+    summary: str
+    evidence: list[EvidenceItem]
+    options: list[RecommendationOption] = Field(min_length=1, max_length=3)
+    recommended_option_id: str
+    reasoning_summary: str
+
+
+class ActionDraft(BaseModel):
+    tool: str
+    arguments: dict[str, Any]
+
+
+class RadarState(BaseModel):
+    state: AgentLifecycle = AgentLifecycle.INIT
+    customer_id: str
+    trigger_type: str | None = None
+    user_message: str | None = None
+    snapshot: dict[str, Any] | None = None
+    signals: list[dict[str, Any]] = Field(default_factory=list)
+    financial_analysis: dict[str, Any] | None = None
+    recommendation: RecommendationResult | None = None
+    selected_action: str | None = None
+    action_draft: ActionDraft | None = None
+    policy_result: PolicyDecision | None = None
+    confirmation_status: str = "NOT_REQUIRED"
+    execution_result: dict[str, Any] | None = None
+    action_id: str | None = None
+    error: str | None = None
+
+    def transition(self, target: AgentLifecycle) -> None:
+        if target not in ALLOWED_TRANSITIONS[self.state]:
+            raise ValueError(f"Invalid agent transition: {self.state} -> {target}")
+        self.state = target
+
