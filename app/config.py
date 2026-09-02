@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_timeout_seconds: int = 60
     llm_structured_retries: int = 2
+    agent_recommendation_ttl_seconds: int = 900
 
     greennode_client_id: str | None = None
     greennode_client_secret: str | None = Field(default=None, repr=False)
@@ -45,8 +46,6 @@ class Settings(BaseSettings):
             missing = [
                 name
                 for name, value in {
-                    "GREENNODE_CLIENT_ID": self.greennode_client_id,
-                    "GREENNODE_CLIENT_SECRET": self.greennode_client_secret,
                     "LLM_BASE_URL": self.llm_base_url,
                     "LLM_MODEL": self.llm_model,
                     "LLM_API_KEY": self.llm_api_key,
@@ -60,6 +59,8 @@ class Settings(BaseSettings):
                 )
             if self.llm_provider != "greennode":
                 raise ValueError("AGENT_RUNTIME=greennode requires LLM_PROVIDER=greennode")
+        if self.agent_recommendation_ttl_seconds <= 0:
+            raise ValueError("AGENT_RECOMMENDATION_TTL_SECONDS must be greater than zero")
         return self
 
 

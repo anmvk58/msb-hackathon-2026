@@ -21,7 +21,11 @@ class AgentRuntime(ABC):
         customer_id: str,
         message: str,
         as_of: object,
-        selected_option_id: str | None = None,
+    ) -> RadarState: ...
+
+    @abstractmethod
+    def select(
+        self, session: Session, *, recommendation_id: str, option_id: str
     ) -> RadarState: ...
 
     @abstractmethod
@@ -46,4 +50,5 @@ class AgentRuntime(ABC):
         tool_name: str,
         arguments: dict,
         signal_id: str | None = None,
+        recommendation_id: str | None = None,
     ) -> BaseModel: ...

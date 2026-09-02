@@ -12,6 +12,7 @@ from app.agent.schemas import (
     AgentConfirmRequest,
     AgentResponse,
     AgentRunRequest,
+    AgentSelectRequest,
     response_from_state,
 )
 from app.config import get_settings
@@ -165,7 +166,6 @@ def agent_run(payload: AgentRunRequest, session: DbSession) -> AgentResponse:
             customer_id=payload.customer_id,
             message=payload.message,
             as_of=payload.as_of or date.today(),
-            selected_option_id=payload.selected_option_id,
         )
         return response_from_state(state)
     except LLMAuthenticationError as error:
@@ -176,6 +176,27 @@ def agent_run(payload: AgentRunRequest, session: DbSession) -> AgentResponse:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/agent/select", response_model=AgentResponse)
+def agent_select(payload: AgentSelectRequest, session: DbSession) -> AgentResponse:
+    try:
+        return response_from_state(
+            runtime.select(
+                session,
+                recommendation_id=payload.recommendation_id,
+                option_id=payload.option_id,
+            )
+        )
+    except ValueError as error:
+        message = str(error)
+        if "expired" in message or "no longer active" in message:
+            status_code = 409
+        elif "Unknown recommendation_id" in message:
+            status_code = 404
+        else:
+            status_code = 422
+        raise HTTPException(status_code=status_code, detail=message) from error
 
 
 @app.post("/api/agent/confirm", response_model=AgentResponse)

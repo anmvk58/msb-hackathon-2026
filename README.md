@@ -70,8 +70,10 @@ Dockerfile                AgentBase-compatible HTTP container
 
 The schema contains `customers`, `accounts`, `transactions`, `recurring_events`,
 `saving_goals`, `budgets`, `reminders`, `radar_signals`, and
-`agent_action_logs`. Logs include tool input/output, customer, signal, policy,
-confirmation, execution status, and latency.
+`agent_recommendations`, and `agent_action_logs`. Recommendations store only the
+structured candidate plan and display/audit decision (never hidden chain-of-thought),
+expire after 15 minutes by default, and link signals to actions. Action logs include
+`recommendation_id`, tool input/output, policy, confirmation, status, and latency.
 
 SQLite is the default. PostgreSQL can be selected through:
 
@@ -117,15 +119,24 @@ POST /api/agent/run
 }
 ```
 
-Send the same request with `"selected_option_id": "A"` to prepare the shopping
-budget. The response is `WAITING_CONFIRMATION`; no budget exists yet. Confirm:
+The response contains `recommendation_id`. Select the immutable stored option
+without resending tool parameters:
+
+```json
+POST /api/agent/select
+{"recommendation_id":"<returned-recommendation-id>","option_id":"A"}
+```
+
+The response is `WAITING_CONFIRMATION`; Financial Engine and MaaS are not rerun,
+and no budget exists yet. Confirm:
 
 ```json
 POST /api/agent/confirm
 {"action_id":"<returned-action-id>","confirmed":true}
 ```
 
-The resulting state is `EXECUTED`, backed by actual tool output. For seeded
+The resulting state is `MONITORING`, backed by actual tool output; this phase
+records monitoring intent but does not start background jobs. For seeded
 inputs, the forecast to 2026-09-15 is 1,366,667 VND, calculated from database
 evidence rather than embedded as an output constant.
 
@@ -141,6 +152,7 @@ evidence rather than embedded as an output constant.
 - `POST /api/actions/create-reminder`
 - `POST /api/actions/update-goal`
 - `POST /api/agent/run`
+- `POST /api/agent/select`
 - `POST /api/agent/confirm`
 - `GET /api/agent/actions/{action_id}`
 - `GET /api/customers/{customer_id}/signals`
@@ -166,12 +178,15 @@ LLM_BASE_URL=
 LLM_API_KEY=
 LLM_MODEL=
 LLM_TIMEOUT_SECONDS=60
+AGENT_RECOMMENDATION_TTL_SECONDS=900
 ```
 
 `AGENT_RUNTIME=local` uses `MockLLMClient`. `AGENT_RUNTIME=greennode` fails fast
-unless the MaaS and IAM variables are all configured, then uses
+unless `LLM_PROVIDER=greennode` and all MaaS variables are configured, then uses
 `GreenNodeLLMClient` against the OpenAI-compatible Chat Completions endpoint.
-Malformed structured output is validated with Pydantic and retried without regex.
+Installed GreenNode documentation does not guarantee `response_format=json_object`,
+so the client uses strict JSON instructions followed by `json.loads`, Pydantic
+validation, and bounded retries.
 
 Business logic creates a fixed `CandidateActionPlan` first. MaaS may only return
 the narrative summary, reasoning, and an existing `recommended_option_id`; the
@@ -181,9 +196,12 @@ server merges that decision with the original immutable action parameters.
 
 The runtime factory supports both `LocalAgentRuntime` and
 `GreenNodeAgentRuntime`. The latter is the Custom Agent container implementation:
-AgentBase supplies hosting, IAM injection, endpoint, and monitoring, while tools
-remain local in-process for MVP simplicity. Port 8080 and `GET /health` satisfy
-the platform contract; business requests use `POST /api/agent/run`.
+AgentBase supplies hosting, lifecycle, IAM injection, endpoint, and platform-level
+monitoring. The MSB application still owns the orchestration state machine,
+Financial Engine, tools, policy/confirmation, persistence, and MaaS calls. Platform
+IAM credentials are used by deployment skills/control-plane operations and are not
+required for the FastAPI process to boot. Port 8080 and `GET /health` satisfy the
+platform contract.
 
 See [AgentBase deployment readiness](docs/AGENTBASE_DEPLOYMENT.md) for the
 resource plan, remaining deployment choices, and cost considerations.

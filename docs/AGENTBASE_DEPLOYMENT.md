@@ -8,8 +8,12 @@ multiple agents or network-isolated capabilities need to share them.
 ## Authentication separation
 
 - `GREENNODE_CLIENT_ID` and `GREENNODE_CLIENT_SECRET`: AgentBase platform IAM
-  lifecycle authentication. AgentBase injects runtime-specific values after deploy.
-- `LLM_API_KEY`: GreenNode MaaS model authentication only.
+  lifecycle authentication used by skills, preflight, deployment, and control-plane
+  operations. The FastAPI process does not consume or require them.
+- `LLM_BASE_URL`, `LLM_MODEL`, and `LLM_API_KEY`: application runtime configuration
+  consumed by `GreenNodeLLMClient` for GreenNode MaaS only.
+- `GREENNODE_AGENT_IDENTITY` and `GREENNODE_ENDPOINT_URL`: runtime metadata injected
+  by AgentBase after deployment; the application does not require them to boot.
 
 These credentials are never exchanged or logged as substitutes for each other.
 
@@ -19,7 +23,27 @@ These credentials are never exchanged or logged as substitutes for each other.
 - Container port: `8080`.
 - Readiness endpoint: `GET /health` returns HTTP 200.
 - Business invocation: `POST /api/agent/run`.
+- Persisted selection: `POST /api/agent/select`.
 - Runtime mode: `AGENT_RUNTIME=greennode`.
+
+AgentBase does not control individual `RadarState` transitions. It hosts and
+operates the Custom Agent container. The in-container MSB application owns the
+state machine, financial tools, policy, confirmation, action execution, database,
+and MaaS calls.
+
+## Environment boundary
+
+Application runtime variables include `AGENT_RUNTIME`, `LLM_PROVIDER`,
+`LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `DATABASE_URL`, and
+`AGENT_RECOMMENDATION_TTL_SECONDS`. Deployment tooling additionally needs
+`GREENNODE_CLIENT_ID` and `GREENNODE_CLIENT_SECRET`, plus registry, wallet,
+network, flavor, replica, and image choices. Lifecycle IAM secrets must not be
+baked into the image or treated as MaaS credentials.
+
+For deployment, `DATABASE_URL` should point to durable external storage. The
+default SQLite file is suitable for local/demo use only and is excluded from the
+Docker image; container-local SQLite state is ephemeral across runtime versions
+or replicas.
 
 ## Resources a deployment would create or consume
 

@@ -34,8 +34,6 @@ def greennode_settings(**overrides) -> Settings:
         "llm_base_url": "https://maas.example.test/v1",
         "llm_model": "enabled-model-path",
         "llm_api_key": "vn-test-secret",
-        "greennode_client_id": "iam-client",
-        "greennode_client_secret": "iam-secret",
     }
     values.update(overrides)
     return Settings(**values)
@@ -85,6 +83,29 @@ def test_runtime_factory_greennode_config_validation() -> None:
             llm_model="model",
             greennode_client_id="id",
             greennode_client_secret="secret",
+        )
+
+
+def test_greennode_app_boot_does_not_require_platform_iam_credentials() -> None:
+    settings = greennode_settings(
+        greennode_client_id=None, greennode_client_secret=None
+    )
+    runtime = build_agent_runtime(
+        settings=settings, llm_transport=decision_transport()
+    )
+    assert isinstance(runtime, GreenNodeAgentRuntime)
+
+
+def test_deployment_credentials_are_separate_from_runtime_credentials() -> None:
+    with pytest.raises(ValueError, match="missing.*LLM_API_KEY"):
+        Settings(
+            _env_file=None,
+            agent_runtime="greennode",
+            llm_provider="greennode",
+            llm_base_url="https://maas.example.test/v1",
+            llm_model="model",
+            greennode_client_id="deployment-only-id",
+            greennode_client_secret="deployment-only-secret",
         )
 
 
@@ -187,19 +208,21 @@ def test_confirmation_still_required_with_greennode_runtime(
     runtime = build_agent_runtime(
         settings=greennode_settings(), llm_transport=decision_transport()
     )
-    waiting = runtime.run(
+    recommendation = runtime.run(
         session,
         customer_id="C001",
         message="Chọn A",
         as_of=date(2026, 9, 1),
-        selected_option_id="A",
+    )
+    waiting = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="A"
     )
     assert waiting.state == AgentLifecycle.WAITING_CONFIRMATION
     assert session.scalar(select(Budget).where(Budget.customer_id == "C001")) is None
     executed = runtime.confirm(
         session, action_id=waiting.action_id, confirmed=True
     )
-    assert executed.state == AgentLifecycle.EXECUTED
+    assert executed.state == AgentLifecycle.MONITORING
     budget = session.scalar(select(Budget).where(Budget.customer_id == "C001"))
     assert budget is not None
     assert budget.amount == Decimal("4000000")

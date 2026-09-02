@@ -179,7 +179,6 @@ class GreenNodeLLMClient:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": structured_prompt},
                     ],
-                    "response_format": {"type": "json_object"},
                     "temperature": 0,
                 }
             )

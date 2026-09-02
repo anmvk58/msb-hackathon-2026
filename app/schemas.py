@@ -94,6 +94,7 @@ class AgentActionLogRead(ORMModel):
     action_id: str
     customer_id: str
     signal_id: str | None
+    recommendation_id: str | None
     action_type: str
     tool_name: str
     tool_input: dict[str, Any]

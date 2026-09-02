@@ -44,6 +44,13 @@ class SignalStatus(StrEnum):
     RESOLVED = "RESOLVED"
 
 
+class RecommendationStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    SELECTED = "SELECTED"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
+
+
 money = Numeric(18, 2)
 
 
@@ -154,12 +161,31 @@ class RadarSignal(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class AgentRecommendation(Base):
+    __tablename__ = "agent_recommendations"
+
+    recommendation_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
+    signal_id: Mapped[str | None] = mapped_column(ForeignKey("radar_signals.signal_id"), nullable=True)
+    problem: Mapped[str] = mapped_column(String(500))
+    severity: Mapped[str] = mapped_column(String(20))
+    recommendation_data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    status: Mapped[RecommendationStatus] = mapped_column(
+        Enum(RecommendationStatus, native_enum=False), default=RecommendationStatus.ACTIVE
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class AgentActionLog(Base):
     __tablename__ = "agent_action_logs"
 
     action_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
     signal_id: Mapped[str | None] = mapped_column(ForeignKey("radar_signals.signal_id"), nullable=True)
+    recommendation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_recommendations.recommendation_id"), nullable=True, index=True
+    )
     action_type: Mapped[str] = mapped_column(String(50))
     tool_name: Mapped[str] = mapped_column(String(100))
     tool_input: Mapped[dict[str, Any]] = mapped_column(JSON)

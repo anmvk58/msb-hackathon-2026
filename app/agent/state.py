@@ -134,6 +134,7 @@ class RadarState(BaseModel):
     signals: list[dict[str, Any]] = Field(default_factory=list)
     financial_analysis: dict[str, Any] | None = None
     recommendation: RecommendationResult | None = None
+    recommendation_id: str | None = None
     selected_action: str | None = None
     action_draft: ActionDraft | None = None
     policy_result: PolicyDecision | None = None

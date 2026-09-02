@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.state import ActionDraft, AgentLifecycle, RecommendationOption
 
@@ -10,7 +10,13 @@ class AgentRunRequest(BaseModel):
     customer_id: str
     message: str = Field(min_length=1, max_length=2000)
     as_of: date | None = None
-    selected_option_id: str | None = None
+
+
+class AgentSelectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recommendation_id: str
+    option_id: str
 
 
 class AgentConfirmRequest(BaseModel):
@@ -31,6 +37,7 @@ class AgentResponse(BaseModel):
     analysis: dict[str, Any] | None = None
     recommendations: list[RecommendationOption] = Field(default_factory=list)
     recommended_option_id: str | None = None
+    recommendation_id: str | None = None
     action_id: str | None = None
     action: ActionDraft | None = None
     confirmation: ConfirmationView
@@ -46,7 +53,7 @@ def response_from_state(state: "RadarState") -> AgentResponse:
     recommendation = state.recommendation
     if state.state == AgentLifecycle.WAITING_CONFIRMATION:
         message = "Tôi đã chuẩn bị hành động. Vui lòng xác nhận trước khi thực thi."
-    elif state.state == AgentLifecycle.EXECUTED:
+    elif state.state in {AgentLifecycle.EXECUTED, AgentLifecycle.MONITORING}:
         message = "Hành động đã được thực thi thành công."
     elif recommendation:
         message = recommendation.summary
@@ -60,6 +67,7 @@ def response_from_state(state: "RadarState") -> AgentResponse:
         analysis=state.financial_analysis,
         recommendations=recommendation.options if recommendation else [],
         recommended_option_id=recommendation.recommended_option_id if recommendation else None,
+        recommendation_id=state.recommendation_id,
         action_id=state.action_id,
         action=state.action_draft,
         confirmation=ConfirmationView(
@@ -69,4 +77,3 @@ def response_from_state(state: "RadarState") -> AgentResponse:
         execution_result=state.execution_result,
         error=state.error,
     )
-

@@ -27,12 +27,15 @@ def test_agent_run_returns_grounded_recommendation(session: Session) -> None:
 
 
 def test_action_not_executed_before_confirmation(session: Session) -> None:
-    state = LocalAgentRuntime().run(
+    runtime = LocalAgentRuntime()
+    recommendation = runtime.run(
         session,
         customer_id="C001",
         message="Tạo ngân sách theo phương án A",
         as_of=AS_OF,
-        selected_option_id="A",
+    )
+    state = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="A"
     )
     assert state.state == AgentLifecycle.WAITING_CONFIRMATION
     assert state.action_id is not None
@@ -47,15 +50,17 @@ def test_action_not_executed_before_confirmation(session: Session) -> None:
 
 def test_action_log_created_after_execution(session: Session) -> None:
     runtime = LocalAgentRuntime()
-    waiting = runtime.run(
+    recommendation = runtime.run(
         session,
         customer_id="C001",
         message="Tạo ngân sách theo phương án A",
         as_of=AS_OF,
-        selected_option_id="A",
+    )
+    waiting = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="A"
     )
     executed = runtime.confirm(session, action_id=waiting.action_id, confirmed=True)
-    assert executed.state == AgentLifecycle.EXECUTED
+    assert executed.state == AgentLifecycle.MONITORING
     assert executed.execution_result["status"] == "SUCCESS"
     budget = session.scalar(select(Budget).where(Budget.customer_id == "C001"))
     assert budget is not None
@@ -69,12 +74,14 @@ def test_action_log_created_after_execution(session: Session) -> None:
 
 def test_declined_action_is_never_executed(session: Session) -> None:
     runtime = LocalAgentRuntime()
-    waiting = runtime.run(
+    recommendation = runtime.run(
         session,
         customer_id="C001",
         message="Tạo ngân sách theo phương án A",
         as_of=AS_OF,
-        selected_option_id="A",
+    )
+    waiting = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="A"
     )
     declined = runtime.confirm(session, action_id=waiting.action_id, confirmed=False)
     assert declined.state == AgentLifecycle.FAILED
@@ -104,4 +111,3 @@ def test_all_agent_tool_calls_are_traced(session: Session) -> None:
         "detect_spending_anomaly",
         "detect_upcoming_recurring",
     }
-

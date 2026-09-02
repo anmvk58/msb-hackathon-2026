@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+import logging
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -19,7 +20,15 @@ from app.agent.state import (
 )
 from app.llm import LLMClient, MockLLMClient
 from app.llm.prompts import FINANCIAL_RADAR_SYSTEM_PROMPT
-from app.models import AgentActionLog, RadarSignal, SignalStatus, SignalType
+from app.config import get_settings
+from app.models import (
+    AgentActionLog,
+    AgentRecommendation,
+    RadarSignal,
+    RecommendationStatus,
+    SignalStatus,
+    SignalType,
+)
 from app.policy import PolicyEngine
 from app.tools import ToolRegistry, build_tool_registry
 
@@ -30,17 +39,30 @@ def _json(value: BaseModel | dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+logger = logging.getLogger(__name__)
+
+
+def should_monitor(tool_name: str) -> bool:
+    return tool_name in {"create_budget", "update_goal", "create_reminder"}
+
+
 class LocalAgentRuntime(AgentRuntime):
     def __init__(
         self,
         *,
         registry: ToolRegistry | None = None,
         llm_client: LLMClient | None = None,
+        recommendation_ttl_seconds: int | None = None,
     ) -> None:
         self.registry = registry or build_tool_registry()
         self.policy = PolicyEngine(self.registry)
         self.llm = llm_client or MockLLMClient()
         self.candidate_generator = CandidateActionGenerator()
+        self.recommendation_ttl_seconds = (
+            recommendation_ttl_seconds
+            if recommendation_ttl_seconds is not None
+            else get_settings().agent_recommendation_ttl_seconds
+        )
 
     def trace_tool(
         self,
@@ -50,6 +72,7 @@ class LocalAgentRuntime(AgentRuntime):
         tool_name: str,
         arguments: dict[str, Any],
         signal_id: str | None = None,
+        recommendation_id: str | None = None,
     ) -> BaseModel:
         started = perf_counter()
         try:
@@ -61,6 +84,7 @@ class LocalAgentRuntime(AgentRuntime):
                     action_id=f"T-{uuid4().hex[:16].upper()}",
                     customer_id=customer_id,
                     signal_id=signal_id,
+                    recommendation_id=recommendation_id,
                     action_type="TOOL_CALL",
                     tool_name=tool_name,
                     tool_input=arguments,
@@ -80,6 +104,7 @@ class LocalAgentRuntime(AgentRuntime):
                 action_id=f"T-{uuid4().hex[:16].upper()}",
                 customer_id=customer_id,
                 signal_id=signal_id,
+                recommendation_id=recommendation_id,
                 action_type="TOOL_CALL",
                 tool_name=tool_name,
                 tool_input=arguments,
@@ -160,6 +185,7 @@ class LocalAgentRuntime(AgentRuntime):
             action_id=action_id,
             customer_id=state.customer_id,
             signal_id=signal_id,
+            recommendation_id=state.recommendation_id,
             action_type=option.action_type,
             tool_name=option.action_type,
             tool_input=state.action_draft.arguments,
@@ -202,6 +228,8 @@ class LocalAgentRuntime(AgentRuntime):
         log.latency_ms = round((perf_counter() - started) * 1000)
         state.execution_result = log.tool_output
         state.transition(AgentLifecycle.EXECUTED)
+        if should_monitor(log.tool_name):
+            state.transition(AgentLifecycle.MONITORING)
         if log.signal_id:
             signal = session.get(RadarSignal, log.signal_id)
             if signal:
@@ -216,7 +244,6 @@ class LocalAgentRuntime(AgentRuntime):
         customer_id: str,
         message: str,
         as_of: object,
-        selected_option_id: str | None = None,
     ) -> RadarState:
         if not isinstance(as_of, date):
             raise TypeError("as_of must be a date")
@@ -289,22 +316,89 @@ class LocalAgentRuntime(AgentRuntime):
             session, customer_id=customer_id, as_of=as_of,
             primary_type=primary_type, analysis=analysis
         )
-        decision = self.llm.generate_structured(
-            system_prompt=FINANCIAL_RADAR_SYSTEM_PROMPT,
-            user_prompt=message,
-            response_model=LLMRecommendationDecision,
-            context={
-                "candidate_plan": candidate.model_dump(mode="json"),
-                "financial_analysis": analysis,
-            },
+        recommendation_id = f"R-{uuid4().hex[:16].upper()}"
+        state.recommendation_id = recommendation_id
+        llm_started = perf_counter()
+        try:
+            decision = self.llm.generate_structured(
+                system_prompt=FINANCIAL_RADAR_SYSTEM_PROMPT,
+                user_prompt=message,
+                response_model=LLMRecommendationDecision,
+                context={
+                    "candidate_plan": candidate.model_dump(mode="json"),
+                    "financial_analysis": analysis,
+                },
+            )
+        except Exception as error:
+            logger.warning(
+                "llm_invocation customer_id=%s recommendation_id=%s model=%s "
+                "latency_ms=%s success=false error_type=%s",
+                customer_id,
+                recommendation_id,
+                getattr(self.llm, "model", type(self.llm).__name__),
+                round((perf_counter() - llm_started) * 1000),
+                type(error).__name__,
+            )
+            raise
+        logger.info(
+            "llm_invocation customer_id=%s recommendation_id=%s model=%s "
+            "latency_ms=%s success=true selected_option=%s prompt_version=financial-radar-v1",
+            customer_id,
+            recommendation_id,
+            getattr(self.llm, "model", type(self.llm).__name__),
+            round((perf_counter() - llm_started) * 1000),
+            decision.recommended_option_id,
         )
         state.recommendation = assemble_recommendation(candidate, decision)
+        now = datetime.utcnow()
+        session.add(
+            AgentRecommendation(
+                recommendation_id=recommendation_id,
+                customer_id=customer_id,
+                signal_id=signal.signal_id,
+                problem=state.recommendation.problem,
+                severity=state.recommendation.severity,
+                recommendation_data={
+                    "candidate_plan": candidate.model_dump(mode="json"),
+                    "recommendation": state.recommendation.model_dump(mode="json"),
+                },
+                status=RecommendationStatus.ACTIVE,
+                created_at=now,
+                expires_at=now + timedelta(seconds=self.recommendation_ttl_seconds),
+            )
+        )
         signal.status = SignalStatus.SHOWN
         session.commit()
         state.transition(AgentLifecycle.RECOMMENDATION_READY)
-        if selected_option_id:
-            return self._prepare_or_execute(session, state, selected_option_id)
         return state
+
+    def select(
+        self, session: Session, *, recommendation_id: str, option_id: str
+    ) -> RadarState:
+        stored = session.get(AgentRecommendation, recommendation_id)
+        if stored is None:
+            raise ValueError(f"Unknown recommendation_id: {recommendation_id}")
+        if stored.status != RecommendationStatus.ACTIVE:
+            raise ValueError("Recommendation is no longer active")
+        if stored.expires_at is not None and datetime.utcnow() >= stored.expires_at:
+            stored.status = RecommendationStatus.EXPIRED
+            session.commit()
+            raise ValueError("Recommendation has expired; request a fresh recommendation")
+        recommendation = RecommendationResult.model_validate(
+            stored.recommendation_data["recommendation"]
+        )
+        state = RadarState(
+            customer_id=stored.customer_id,
+            state=AgentLifecycle.RECOMMENDATION_READY,
+            recommendation_id=stored.recommendation_id,
+            recommendation=recommendation,
+            signals=([{"signal_id": stored.signal_id}] if stored.signal_id else []),
+        )
+        result = self._prepare_or_execute(session, state, option_id)
+        if result.state != AgentLifecycle.FAILED:
+            stored.status = RecommendationStatus.SELECTED
+            session.commit()
+        return result
 
     def confirm(self, session: Session, *, action_id: str, confirmed: bool) -> RadarState:
         log = session.get(AgentActionLog, action_id)
@@ -313,6 +407,7 @@ class LocalAgentRuntime(AgentRuntime):
         state = RadarState(
             customer_id=log.customer_id,
             state=AgentLifecycle.WAITING_CONFIRMATION,
+            recommendation_id=log.recommendation_id,
             action_id=log.action_id,
             action_draft=ActionDraft(tool=log.tool_name, arguments=log.tool_input),
             policy_result=self.policy.evaluate(log.tool_name),

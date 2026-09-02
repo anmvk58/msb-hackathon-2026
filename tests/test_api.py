@@ -52,12 +52,10 @@ def test_agent_confirmation_e2e(session: Session) -> None:
             },
         )
         waiting = client.post(
-            "/api/agent/run",
+            "/api/agent/select",
             json={
-                "customer_id": "C001",
-                "message": "Chọn phương án A",
-                "as_of": "2026-09-01",
-                "selected_option_id": "A",
+                "recommendation_id": recommendation.json()["recommendation_id"],
+                "option_id": "A",
             },
         )
         action_id = waiting.json()["action_id"]
@@ -75,7 +73,7 @@ def test_agent_confirmation_e2e(session: Session) -> None:
     assert waiting.json()["confirmation"]["required"] is True
     assert before.json()["action_status"] == "PREPARED"
     assert before.json()["tool_output"] is None
-    assert confirmed.json()["state"] == "EXECUTED"
+    assert confirmed.json()["state"] == "MONITORING"
     assert confirmed.json()["execution_result"]["status"] == "SUCCESS"
     assert after.json()["action_status"] == "SUCCESS"
 
@@ -112,4 +110,3 @@ def test_signals_endpoint(session: Session) -> None:
     app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()[0]["signal_type"] == "CASHFLOW_RISK"
-
