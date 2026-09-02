@@ -160,31 +160,33 @@ policy, transition safety, tracing, confirmation, persistence, and FastAPI E2E.
 ## LLM configuration
 
 ```dotenv
-LLM_PROVIDER=
+AGENT_RUNTIME=local
+LLM_PROVIDER=greennode
 LLM_BASE_URL=
 LLM_API_KEY=
 LLM_MODEL=
 LLM_TIMEOUT_SECONDS=60
 ```
 
-The current path uses `MockLLMClient`. A real adapter should only be added after
-the provider's authentication and structured-output contract is confirmed.
+`AGENT_RUNTIME=local` uses `MockLLMClient`. `AGENT_RUNTIME=greennode` fails fast
+unless the MaaS and IAM variables are all configured, then uses
+`GreenNodeLLMClient` against the OpenAI-compatible Chat Completions endpoint.
+Malformed structured output is validated with Pydantic and retried without regex.
+
+Business logic creates a fixed `CandidateActionPlan` first. MaaS may only return
+the narrative summary, reasoning, and an existing `recommended_option_id`; the
+server merges that decision with the original immutable action parameters.
 
 ## GreenNode AgentBase
 
-The Codex AgentBase plugin is installed, but `greennode_agentbase` is not
-installed in the Python environment and no IAM/LLM credentials are configured.
-The application therefore uses the `AgentRuntime` abstraction with
-`LocalAgentRuntime`. It already listens on port 8080 and exposes `GET /health`.
+The runtime factory supports both `LocalAgentRuntime` and
+`GreenNodeAgentRuntime`. The latter is the Custom Agent container implementation:
+AgentBase supplies hosting, IAM injection, endpoint, and monitoring, while tools
+remain local in-process for MVP simplicity. Port 8080 and `GET /health` satisfy
+the platform contract; business requests use `POST /api/agent/run`.
 
-Before adding the real adapter or deploying, confirm:
-
-1. GreenNode MaaS versus another LLM provider.
-2. Base URL, authentication flow, and enabled model ID.
-3. Whether the API is OpenAI-compatible.
-4. Official AgentBase SDK/package and invocation contract.
-5. Gateway/tool-registration contract.
-6. Whether a separate context/memory API is required.
+See [AgentBase deployment readiness](docs/AGENTBASE_DEPLOYMENT.md) for the
+resource plan, remaining deployment choices, and cost considerations.
 
 Secrets must stay in environment variables or AgentBase Identity and must never
 be committed.

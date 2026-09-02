@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, timedelta
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -7,17 +7,19 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.candidates import CandidateActionGenerator
 from app.agent.runtime import AgentRuntime
 from app.agent.state import (
     ActionDraft,
     AgentLifecycle,
+    LLMRecommendationDecision,
     RadarState,
     RecommendationResult,
+    assemble_recommendation,
 )
-from app.financial_engine import calculate_budget_guardrail
 from app.llm import LLMClient, MockLLMClient
 from app.llm.prompts import FINANCIAL_RADAR_SYSTEM_PROMPT
-from app.models import AgentActionLog, Category, RadarSignal, SignalStatus, SignalType
+from app.models import AgentActionLog, RadarSignal, SignalStatus, SignalType
 from app.policy import PolicyEngine
 from app.tools import ToolRegistry, build_tool_registry
 
@@ -38,8 +40,9 @@ class LocalAgentRuntime(AgentRuntime):
         self.registry = registry or build_tool_registry()
         self.policy = PolicyEngine(self.registry)
         self.llm = llm_client or MockLLMClient()
+        self.candidate_generator = CandidateActionGenerator()
 
-    def _trace_tool(
+    def trace_tool(
         self,
         session: Session,
         *,
@@ -125,127 +128,6 @@ class LocalAgentRuntime(AgentRuntime):
             signal.signal_data = data
         session.commit()
         return signal
-
-    def _recommendation_candidate(
-        self,
-        session: Session,
-        *,
-        customer_id: str,
-        as_of: date,
-        primary_type: SignalType,
-        analysis: dict[str, Any],
-    ) -> dict[str, Any]:
-        if primary_type == SignalType.CASHFLOW_RISK:
-            guardrail = calculate_budget_guardrail(session, customer_id, Category.SHOPPING)
-            return {
-                "problem": "Dòng tiền dự kiến xuống dưới mức an toàn",
-                "severity": analysis["risk_level"],
-                "summary": (
-                    f"Số dư dự báo là {_vnd(analysis['forecast_balance'])} VND, thấp hơn "
-                    f"mức an toàn {_vnd(analysis['safe_balance'])} VND."
-                ),
-                "evidence": [
-                    {
-                        "source": "forecast_cashflow",
-                        "metric": "forecast_balance",
-                        "value": analysis["forecast_balance"],
-                        "context": {"gap": analysis["gap"], "confidence": analysis["confidence"]},
-                    },
-                    *[
-                        {
-                            "source": "forecast_cashflow",
-                            "metric": driver["type"],
-                            "value": driver["impact"],
-                            "context": driver["evidence"],
-                        }
-                        for driver in analysis["drivers"]
-                    ],
-                ],
-                "options": [
-                    {
-                        "option_id": "A",
-                        "title": "Tạo ngân sách mua sắm",
-                        "description": "Đặt giới hạn SHOPPING và cảnh báo ở mức 80%.",
-                        "action_type": "create_budget",
-                        "parameters": {
-                            "customer_id": customer_id,
-                            "category": "SHOPPING",
-                            "amount": str(guardrail.recommended_amount),
-                            "alert_threshold": "0.8",
-                            "start_date": as_of.isoformat(),
-                            "end_date": as_of.replace(day=28).isoformat(),
-                        },
-                        "expected_impact": "Giảm tốc độ chi tiêu tùy ý trong tháng.",
-                    },
-                    {
-                        "option_id": "B",
-                        "title": "Tạo nhắc nhở trước khoản định kỳ",
-                        "description": "Nhắc kiểm tra số dư trước ngày đến hạn.",
-                        "action_type": "create_reminder",
-                        "parameters": {
-                            "customer_id": customer_id,
-                            "title": "Kiểm tra số dư trước khoản định kỳ",
-                            "remind_at": datetime.combine(as_of, time(9)).isoformat(),
-                            "message": "Kiểm tra số dư và chi tiêu tùy ý trước khoản định kỳ sắp tới.",
-                        },
-                        "expected_impact": "Giúp chủ động điều chỉnh trước ngày thanh toán.",
-                    },
-                ],
-                "recommended_option_id": "A",
-                "reasoning_summary": "Option A trực tiếp xử lý driver chi tiêu tùy ý và tuân thủ policy confirmation.",
-            }
-        if primary_type == SignalType.SPENDING_ANOMALY:
-            anomaly = analysis["anomalies"][0]
-            guardrail = calculate_budget_guardrail(session, customer_id, anomaly["category"])
-            return {
-                "problem": "Chi tiêu theo danh mục tăng bất thường",
-                "severity": "MEDIUM",
-                "summary": f"Chi tiêu {anomaly['category']} tăng {DecimalString.percent(anomaly['change_pct'])} so với baseline.",
-                "evidence": [{"source": "detect_spending_anomaly", "metric": "change_pct", "value": anomaly["change_pct"], "context": anomaly}],
-                "options": [{
-                    "option_id": "A", "title": "Tạo ngân sách danh mục", "description": "Áp dụng guardrail theo thu nhập.",
-                    "action_type": "create_budget",
-                    "parameters": {"customer_id": customer_id, "category": anomaly["category"], "amount": str(guardrail.recommended_amount), "alert_threshold": "0.8", "start_date": as_of.isoformat(), "end_date": as_of.replace(day=28).isoformat()},
-                    "expected_impact": "Hạn chế chi vượt baseline trong phần còn lại của tháng."
-                }],
-                "recommended_option_id": "A", "reasoning_summary": "Guardrail được Financial Engine suy ra từ thu nhập, không do LLM tính."
-            }
-        if primary_type == SignalType.GOAL_DRIFT:
-            scenarios = analysis["scenarios"]
-            options = []
-            for index, scenario in enumerate(scenarios):
-                parameters = {"customer_id": customer_id, "goal_id": analysis["goal_id"]}
-                if scenario["action_type"] == "INCREASE_CONTRIBUTION":
-                    parameters["monthly_contribution"] = scenario["monthly_contribution"]
-                else:
-                    parameters["target_date"] = scenario["target_date"]
-                options.append({
-                    "option_id": chr(ord("A") + index),
-                    "title": "Tăng đóng góp" if index == 0 else "Gia hạn mục tiêu",
-                    "description": "Áp dụng kịch bản deterministic từ Financial Engine.",
-                    "action_type": "update_goal", "parameters": parameters,
-                    "expected_impact": "Đưa lộ trình mục tiêu về trạng thái khả thi."
-                })
-            return {
-                "problem": "Mục tiêu tiết kiệm đang chậm tiến độ", "severity": "MEDIUM",
-                "summary": f"Tiến độ thực tế thấp hơn kỳ vọng {_vnd(abs(int(analysis['gap_analysis']['gap'])))} VND.",
-                "evidence": [{"source": "simulate_goal_scenarios", "metric": "goal_gap", "value": analysis["gap_analysis"]["gap"], "context": analysis["gap_analysis"]}],
-                "options": options, "recommended_option_id": "A",
-                "reasoning_summary": "Kịch bản tăng đóng góp giữ nguyên deadline hiện tại."
-            }
-        event = analysis["events"][0]
-        return {
-            "problem": "Khoản thanh toán định kỳ sắp đến", "severity": "MEDIUM",
-            "summary": f"{event['name']} trị giá {_vnd(event['expected_amount'])} VND sẽ đến hạn sau {event['days_until']} ngày.",
-            "evidence": [{"source": "detect_upcoming_recurring", "metric": "expected_amount", "value": event["expected_amount"], "context": event}],
-            "options": [{
-                "option_id": "A", "title": "Tạo nhắc nhở", "description": "Nhắc kiểm tra số dư trước hạn.",
-                "action_type": "create_reminder",
-                "parameters": {"customer_id": customer_id, "title": f"Chuẩn bị {event['name']}", "remind_at": datetime.combine(as_of, time(9)).isoformat(), "message": f"Khoản {event['name']} sắp đến hạn."},
-                "expected_impact": "Giảm nguy cơ bỏ lỡ khoản định kỳ."
-            }],
-            "recommended_option_id": "A", "reasoning_summary": "Nhắc nhở là hành động low-risk phù hợp evidence."
-        }
 
     def _prepare_or_execute(
         self,
@@ -339,22 +221,22 @@ class LocalAgentRuntime(AgentRuntime):
         if not isinstance(as_of, date):
             raise TypeError("as_of must be a date")
         state = RadarState(customer_id=customer_id, user_message=message)
-        snapshot = self._trace_tool(
+        snapshot = self.trace_tool(
             session, customer_id=customer_id, tool_name="get_financial_snapshot",
             arguments={"customer_id": customer_id}
         )
         state.snapshot = _json(snapshot)
         state.transition(AgentLifecycle.CONTEXT_READY)
 
-        forecast = self._trace_tool(
+        forecast = self.trace_tool(
             session, customer_id=customer_id, tool_name="forecast_cashflow",
             arguments={"customer_id": customer_id, "as_of": as_of.isoformat(), "forecast_until": (as_of + timedelta(days=14)).isoformat()}
         )
-        anomaly = self._trace_tool(
+        anomaly = self.trace_tool(
             session, customer_id=customer_id, tool_name="detect_spending_anomaly",
             arguments={"customer_id": customer_id, "as_of": as_of.isoformat()}
         )
-        recurring = self._trace_tool(
+        recurring = self.trace_tool(
             session, customer_id=customer_id, tool_name="detect_upcoming_recurring",
             arguments={"customer_id": customer_id, "as_of": as_of.isoformat(), "window_days": 14}
         )
@@ -371,7 +253,7 @@ class LocalAgentRuntime(AgentRuntime):
             severity = "MEDIUM"
         else:
             try:
-                goal = self._trace_tool(
+                goal = self.trace_tool(
                     session, customer_id=customer_id, tool_name="simulate_goal_scenarios",
                     arguments={"customer_id": customer_id, "as_of": as_of.isoformat()}
                 )
@@ -403,16 +285,20 @@ class LocalAgentRuntime(AgentRuntime):
         state.transition(AgentLifecycle.SIGNAL_DETECTED)
         state.financial_analysis = analysis
         state.transition(AgentLifecycle.ANALYSIS_READY)
-        candidate = self._recommendation_candidate(
+        candidate = self.candidate_generator.generate(
             session, customer_id=customer_id, as_of=as_of,
             primary_type=primary_type, analysis=analysis
         )
-        state.recommendation = self.llm.generate_structured(
+        decision = self.llm.generate_structured(
             system_prompt=FINANCIAL_RADAR_SYSTEM_PROMPT,
             user_prompt=message,
-            response_model=RecommendationResult,
-            context={"grounded_candidate": candidate, "financial_analysis": analysis},
+            response_model=LLMRecommendationDecision,
+            context={
+                "candidate_plan": candidate.model_dump(mode="json"),
+                "financial_analysis": analysis,
+            },
         )
+        state.recommendation = assemble_recommendation(candidate, decision)
         signal.status = SignalStatus.SHOWN
         session.commit()
         state.transition(AgentLifecycle.RECOMMENDATION_READY)
@@ -487,20 +373,3 @@ class LocalAgentRuntime(AgentRuntime):
         )
         state.transition(AgentLifecycle.RECOMMENDATION_READY)
         return self._prepare_or_execute(session, state, "DIRECT")
-
-
-class DecimalString:
-    @staticmethod
-    def percent(value: str | int | float) -> str:
-        from decimal import Decimal
-
-        return f"{Decimal(str(value)) * 100:.0f}%"
-
-
-def _vnd(value: object) -> str:
-    from decimal import Decimal
-
-    return f"{int(Decimal(str(value))):,}"
-
-
-from datetime import timedelta  # kept after class declarations for compact imports

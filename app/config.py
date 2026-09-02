@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     app_name: str = "MSB Financial Radar"
     app_env: str = "development"
+    agent_runtime: str = "local"
     database_url: str = "sqlite:///./financial_radar.db"
     sql_echo: bool = False
 
@@ -28,11 +29,38 @@ class Settings(BaseSettings):
     llm_api_key: str | None = Field(default=None, repr=False)
     llm_model: str | None = None
     llm_timeout_seconds: int = 60
+    llm_structured_retries: int = 2
 
-    greennode_base_url: str | None = None
-    greennode_api_key: str | None = Field(default=None, repr=False)
-    greennode_model: str | None = None
-    greennode_agent_id: str | None = None
+    greennode_client_id: str | None = None
+    greennode_client_secret: str | None = Field(default=None, repr=False)
+    greennode_agent_identity: str | None = None
+    greennode_endpoint_url: str | None = None
+    run_greennode_integration_tests: bool = False
+
+    @model_validator(mode="after")
+    def validate_runtime_configuration(self) -> "Settings":
+        if self.agent_runtime not in {"local", "greennode"}:
+            raise ValueError("AGENT_RUNTIME must be 'local' or 'greennode'")
+        if self.agent_runtime == "greennode":
+            missing = [
+                name
+                for name, value in {
+                    "GREENNODE_CLIENT_ID": self.greennode_client_id,
+                    "GREENNODE_CLIENT_SECRET": self.greennode_client_secret,
+                    "LLM_BASE_URL": self.llm_base_url,
+                    "LLM_MODEL": self.llm_model,
+                    "LLM_API_KEY": self.llm_api_key,
+                }.items()
+                if not value
+            ]
+            if missing:
+                raise ValueError(
+                    "GreenNode runtime configuration is incomplete; missing: "
+                    + ", ".join(missing)
+                )
+            if self.llm_provider != "greennode":
+                raise ValueError("AGENT_RUNTIME=greennode requires LLM_PROVIDER=greennode")
+        return self
 
 
 @lru_cache

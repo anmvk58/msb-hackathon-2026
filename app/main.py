@@ -7,14 +7,21 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.local_runtime import LocalAgentRuntime
+from app.agent.factory import build_agent_runtime
 from app.agent.schemas import (
     AgentConfirmRequest,
     AgentResponse,
     AgentRunRequest,
     response_from_state,
 )
+from app.config import get_settings
 from app.database import create_schema, get_db
+from app.llm import (
+    LLMAuthenticationError,
+    LLMRequestError,
+    LLMStructuredOutputError,
+    LLMTimeoutError,
+)
 from app.models import AgentActionLog, Customer, RadarSignal
 from app.schemas import AgentActionLogRead, RadarSignalRead
 from app.tools import build_tool_registry
@@ -44,18 +51,27 @@ app = FastAPI(
     lifespan=lifespan,
 )
 registry = build_tool_registry()
-runtime = LocalAgentRuntime(registry=registry)
+settings = get_settings()
+runtime = build_agent_runtime(settings=settings, registry=registry)
 DbSession = Annotated[Session, Depends(get_db)]
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "healthy", "runtime": "LocalAgentRuntime"}
+    return {
+        "status": "healthy",
+        "runtime": type(runtime).__name__,
+        "llm_provider": (
+            settings.llm_provider
+            if settings.agent_runtime == "greennode"
+            else "mock"
+        ),
+    }
 
 
 def _execute_tool(session: Session, tool_name: str, payload: BaseModel) -> dict:
     try:
-        result = runtime._trace_tool(
+        result = runtime.trace_tool(
             session,
             customer_id=payload.customer_id,
             tool_name=tool_name,
@@ -81,6 +97,12 @@ def customer_radar(customer_id: str, session: DbSession, as_of: date | None = No
             as_of=as_of or date.today(),
         )
         return response_from_state(state)
+    except LLMAuthenticationError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except LLMTimeoutError as error:
+        raise HTTPException(status_code=504, detail=str(error)) from error
+    except (LLMStructuredOutputError, LLMRequestError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -146,6 +168,12 @@ def agent_run(payload: AgentRunRequest, session: DbSession) -> AgentResponse:
             selected_option_id=payload.selected_option_id,
         )
         return response_from_state(state)
+    except LLMAuthenticationError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except LLMTimeoutError as error:
+        raise HTTPException(status_code=504, detail=str(error)) from error
+    except (LLMStructuredOutputError, LLMRequestError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

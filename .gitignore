@@ -11,5 +11,7 @@ venv/
 dist/
 build/
 .agentbase-state.json
+.agentbase/
 .greennode.json
-
+*.credentials.json
+.agentbase-local.*.log
