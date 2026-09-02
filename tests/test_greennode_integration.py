@@ -125,6 +125,49 @@ def test_greennode_llm_structured_output() -> None:
     assert decision.recommended_option_id == "A"
 
 
+def test_greennode_llm_accepts_fenced_json_without_storing_preamble() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Result:\n```json\n"
+                            + json.dumps(
+                                {
+                                    "summary": "Safe summary",
+                                    "recommended_option_id": "A",
+                                    "reasoning_summary": "Audit-safe reason",
+                                }
+                            )
+                            + "\n```"
+                        }
+                    }
+                ]
+            },
+        )
+
+    client = GreenNodeLLMClient(
+        base_url="https://maas.example.test/v1",
+        model="model",
+        api_key="secret",
+        structured_retries=0,
+        transport=httpx.MockTransport(handler),
+    )
+    decision = client.generate_structured(
+        system_prompt="system",
+        user_prompt="choose",
+        response_model=LLMRecommendationDecision,
+        context={},
+    )
+    assert decision.model_dump() == {
+        "summary": "Safe summary",
+        "recommended_option_id": "A",
+        "reasoning_summary": "Audit-safe reason",
+    }
+
+
 def test_llm_cannot_introduce_unknown_option(session: Session) -> None:
     plan = CandidateActionGenerator().generate(
         session,

@@ -81,6 +81,12 @@ SQLite is the default. PostgreSQL can be selected through:
 DATABASE_URL=postgresql+psycopg://user:password@host/database
 ```
 
+For the Hackathon AgentBase deployment, SQLite is intentionally accepted as
+temporary demo persistence with exactly one replica. The image excludes the
+database file; initialize C001-C004 explicitly using
+`python -m app.seed.reset_demo`. Container or runtime-version replacement loses
+container-local SQLite state, so this configuration is not production-safe.
+
 ## Setup, seed, and start
 
 ```powershell

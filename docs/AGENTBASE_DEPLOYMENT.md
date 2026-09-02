@@ -40,10 +40,16 @@ Application runtime variables include `AGENT_RUNTIME`, `LLM_PROVIDER`,
 network, flavor, replica, and image choices. Lifecycle IAM secrets must not be
 baked into the image or treated as MaaS credentials.
 
-For deployment, `DATABASE_URL` should point to durable external storage. The
-default SQLite file is suitable for local/demo use only and is excluded from the
-Docker image; container-local SQLite state is ephemeral across runtime versions
-or replicas.
+For the current Hackathon MVP, deployment intentionally uses
+`DATABASE_URL=sqlite:///./financial_radar.db`. The database file is not baked into
+the image. On a fresh container, initialize the deterministic C001-C004 demo data
+once with `python -m app.seed.reset_demo`; normal application startup only creates
+missing schema and never resets data on requests.
+
+This SQLite choice is temporary demo persistence, not production-safe across
+container replacement, runtime version replacement, horizontal scaling, or
+multiple replicas. Therefore the MVP runtime must use exactly `minReplicas=1` and
+`maxReplicas=1`; multi-replica autoscaling is disabled.
 
 ## Resources a deployment would create or consume
 

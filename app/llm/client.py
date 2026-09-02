@@ -8,6 +8,21 @@ from pydantic import BaseModel
 StructuredT = TypeVar("StructuredT", bound=BaseModel)
 
 
+def _decode_json_object(content: str) -> dict[str, Any]:
+    """Decode the first JSON object, tolerating Markdown or a short preamble."""
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(content):
+        if character != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(content[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise json.JSONDecodeError("No JSON object found", content, 0)
+
+
 class LLMNotConfiguredError(RuntimeError):
     pass
 
@@ -183,7 +198,7 @@ class GreenNodeLLMClient:
                 }
             )
             try:
-                return response_model.model_validate(json.loads(content))
+                return response_model.model_validate(_decode_json_object(content))
             except (json.JSONDecodeError, ValueError) as error:
                 last_error = error
                 structured_prompt += (
