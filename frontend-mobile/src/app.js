@@ -1,4 +1,6 @@
-const CORE="http://localhost:8090",AGENT="http://localhost:8080",S={id:null,ctx:null,radar:null,visible:true,plan:"profile"};
+// Keep browser requests on the frontend origin. Nginx routes these prefixes to
+// the internal Docker services, so the UI works on localhost, an IP, or a domain.
+const CORE="/api/core",AGENT="/api/agent",S={id:null,ctx:null,radar:null,visible:true,plan:"profile"};
 const $=id=>document.getElementById(id),cash=v=>new Intl.NumberFormat("vi-VN",{style:"currency",currency:"VND",maximumFractionDigits:0}).format(Number(v||0)),todayISO=()=>{const d=new Date(),offset=d.getTimezoneOffset();return new Date(d.getTime()-offset*60000).toISOString().slice(0,10)};
 const labels={FOOD:"Ăn uống",SHOPPING:"Mua sắm",TRANSPORT:"Di chuyển",RENT:"Nhà ở",UTILITY:"Hóa đơn",ENTERTAINMENT:"Giải trí",HEALTH:"Sức khỏe",SALARY:"Lương",TRANSFER:"Chuyển khoản",OTHER:"Khác"},icons={FOOD:"◒",SHOPPING:"◇",TRANSPORT:"↗",RENT:"⌂",UTILITY:"ϟ",ENTERTAINMENT:"▷",HEALTH:"+",SALARY:"↓",TRANSFER:"↕",OTHER:"•"};
 async function api(base,path,options={}){const r=await fetch(base+path,{...options,headers:{"Content-Type":"application/json",...(options.headers||{})}}),d=await r.json().catch(()=>({}));if(!r.ok){const detail=typeof d.detail==="string"?d.detail:Array.isArray(d.detail)?d.detail.map(x=>`${x.loc?.slice(1).join(".")||"request"}: ${x.msg}`).join("; "):`Lỗi ${r.status}`;throw Error(detail)}return d}
