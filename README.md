@@ -18,7 +18,9 @@ flowchart LR
   Runtime --> State[Typed RadarState]
   Runtime --> Registry[Tool Registry]
   Registry --> Engine[Deterministic Financial Engine]
-  Registry --> DB[(SQLite / PostgreSQL)]
+  Registry --> Gateway[HTTP BankingGateway]
+  Gateway --> Core[Mock Core Banking API]
+  Core --> MySQL[(MySQL 8.4)]
   Runtime --> Policy[Policy + Confirmation]
   Policy --> Actions[Action Executor]
   Runtime -. grounded context .-> LLM[LLMClient]
@@ -50,62 +52,48 @@ success. `MockLLMClient` is used locally and in tests.
 ## Project structure
 
 ```text
-app/
-  main.py                 FastAPI endpoints
-  config.py               Environment-backed settings
-  database.py             SQLAlchemy setup
-  models.py               ORM models and enums
-  financial_engine/       Spending, recurring, cashflow, goal calculations
-  tools/                  Contracts, JSON schemas, implementations, registry
-  policy.py               Risk and confirmation decisions
-  llm/                    LLMClient, MockLLMClient, system prompt
-  agent/                  Typed state, AgentRuntime, LocalAgentRuntime
-  seed/                   Deterministic C001-C004 data and reset command
-tests/                    Engine, policy, runtime, confirmation and API tests
-main.py                   Port-8080 container entrypoint
-Dockerfile                AgentBase-compatible HTTP container
+financial-radar-service/
+  app/                    Agent API, runtime, engine, tools and banking gateway
+  tests/                  Agent, engine, policy and integration tests
+  main.py                 Port-8080 AgentBase-compatible entrypoint
+  Dockerfile              Financial Radar image
+mock-core-banking-service/
+  corebanking/            Customer data and Core Banking business API
+  tests/                  Core Banking API tests
+  main.py                 Port-8090 entrypoint
+  Dockerfile              Mock Core Banking image
+frontend-mobile/
+  src/                    Customer-facing Mobile Banking and Financial Radar UI
+  Dockerfile              Nginx frontend image
+docker-compose.yml        MySQL + both backend services + frontend
 ```
 
-## Database
+## Data ownership
 
-The schema contains `customers`, `accounts`, `transactions`, `recurring_events`,
-`saving_goals`, `budgets`, `reminders`, `radar_signals`, and
-`agent_recommendations`, and `agent_action_logs`. Recommendations store only the
-structured candidate plan and display/audit decision (never hidden chain-of-thought),
-expire after 15 minutes by default, and link signals to actions. Action logs include
-`recommendation_id`, tool input/output, policy, confirmation, status, and latency.
+Mock Core Banking owns customers, accounts, transactions, recurring events,
+budgets, saving goals, reminders, and idempotency records in MySQL 8.4.
+Financial Radar never queries those tables. It consumes typed context and applies
+confirmed actions through the Core Banking REST API.
 
-SQLite is the default. PostgreSQL can be selected through:
+The Agent database owns only `radar_signals`, `agent_recommendations`, and
+`agent_action_logs`. Recommendations store structured candidate plans and audit
+decisions. Action logs include tool input/output, policy, confirmation, status,
+latency, and the external Core Banking result.
 
-```dotenv
-DATABASE_URL=postgresql+psycopg://user:password@host/database
-```
-
-For the Hackathon AgentBase deployment, SQLite is intentionally accepted as
-temporary demo persistence with exactly one replica. The image excludes the
-database file; initialize C001-C004 explicitly using
-`python -m app.seed.reset_demo`. Container or runtime-version replacement loses
-container-local SQLite state, so this configuration is not production-safe.
-
-## Setup, seed, and start
+## Setup and start
 
 ```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt
+pip install -r financial-radar-service/requirements-dev.txt
 Copy-Item .env.example .env
-python -m app.seed.reset_demo
-python main.py
+docker compose up --build -d
 ```
 
-Swagger is at `http://localhost:8080/docs`; health is at
-`http://localhost:8080/health`.
-
-Reset the deterministic demo at any time:
-
-```powershell
-python -m app.seed.reset_demo
-```
+Mobile Banking demo is at `http://localhost:3000`. Agent Swagger is at
+`http://localhost:8080/docs`; Core Banking Swagger is at `http://localhost:8090/docs`.
+Core Banking seeds C001-C004 once when its MySQL
+database is empty.
 
 - `C001`: cashflow risk—25m income, 9m balance, 3m safe balance, upcoming 6m
   rent, and historical discretionary spending.
@@ -124,6 +112,10 @@ POST /api/agent/run
   "as_of": "2026-09-01"
 }
 ```
+
+`as_of` is optional. Production and Mobile Banking flows omit it so the Agent
+uses the server's current date. Passing it explicitly is intended for
+reproducible tests, historical analysis, and the documented C001-C004 fixture.
 
 The response contains `recommendation_id`. Select the immutable stored option
 without resending tool parameters:
@@ -169,7 +161,8 @@ Direct action endpoints use the same policy path. `create_budget` and
 ## Tests
 
 ```powershell
-python -m pytest -vv
+python -m pytest financial-radar-service/tests -q
+python -m pytest mock-core-banking-service/tests -q
 ```
 
 Tests require no real LLM and cover the engine, cross-signals, tool validation,
@@ -187,9 +180,11 @@ LLM_TIMEOUT_SECONDS=60
 AGENT_RECOMMENDATION_TTL_SECONDS=900
 ```
 
-`AGENT_RUNTIME=local` uses `MockLLMClient`. `AGENT_RUNTIME=greennode` fails fast
-unless `LLM_PROVIDER=greennode` and all MaaS variables are configured, then uses
-`GreenNodeLLMClient` against the OpenAI-compatible Chat Completions endpoint.
+Runtime placement and LLM provider are configured independently. With
+`AGENT_RUNTIME=local`, `LLM_PROVIDER=mock` uses `MockLLMClient`, while
+`LLM_PROVIDER=greennode` uses `GreenNodeLLMClient` against the real
+OpenAI-compatible MaaS Chat Completions endpoint. `AGENT_RUNTIME=greennode`
+requires the GreenNode provider and the same MaaS variables.
 Installed GreenNode documentation does not guarantee `response_format=json_object`,
 so the client uses strict JSON instructions followed by `json.loads`, Pydantic
 validation, and bounded retries.
@@ -214,3 +209,32 @@ resource plan, remaining deployment choices, and cost considerations.
 
 Secrets must stay in environment variables or AgentBase Identity and must never
 be committed.
+
+## Mock Core Banking service
+
+Phase 1 of the customer-facing demo adds an independent FastAPI Core Banking
+service under `corebanking/`. It owns synthetic customer, account, transaction,
+budget, goal, recurring-event, and reminder data instead of making those tables
+part of the agent boundary. Its local runtime database is MySQL 8.4.
+
+```powershell
+docker compose up --build corebanking
+```
+
+Open `http://localhost:8090/docs`. See
+[Mock Core Banking service](docs/CORE_BANKING_DEMO.md) for API ownership,
+idempotency, local execution, and the boundary of this phase.
+
+Run the integrated local stack:
+
+```powershell
+docker compose up --build -d mysql corebanking financial-radar-agent
+```
+
+- Mobile Banking demo: `http://localhost:3000`
+- Financial Radar Agent: `http://localhost:8080/docs`
+- Mock Core Banking: `http://localhost:8090/docs`
+
+Financial Radar reads all customer context and applies confirmed actions through
+the Core Banking HTTP API. Its local database contains only signals,
+recommendations, and action audit logs.

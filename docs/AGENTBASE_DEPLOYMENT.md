@@ -28,28 +28,27 @@ These credentials are never exchanged or logged as substitutes for each other.
 
 AgentBase does not control individual `RadarState` transitions. It hosts and
 operates the Custom Agent container. The in-container MSB application owns the
-state machine, financial tools, policy, confirmation, action execution, database,
-and MaaS calls.
+state machine, financial tools, policy, confirmation, action orchestration,
+agent audit database, Core Banking HTTP integration, and MaaS calls.
 
 ## Environment boundary
 
 Application runtime variables include `AGENT_RUNTIME`, `LLM_PROVIDER`,
 `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `DATABASE_URL`, and
-`AGENT_RECOMMENDATION_TTL_SECONDS`. Deployment tooling additionally needs
+`AGENT_RECOMMENDATION_TTL_SECONDS`, `CORE_BANKING_BASE_URL`, and
+`CORE_BANKING_TIMEOUT_SECONDS`. Deployment tooling additionally needs
 `GREENNODE_CLIENT_ID` and `GREENNODE_CLIENT_SECRET`, plus registry, wallet,
 network, flavor, replica, and image choices. Lifecycle IAM secrets must not be
 baked into the image or treated as MaaS credentials.
 
-For the current Hackathon MVP, deployment intentionally uses
-`DATABASE_URL=sqlite:///./financial_radar.db`. The database file is not baked into
-the image. On a fresh container, initialize the deterministic C001-C004 demo data
-once with `python -m app.seed.reset_demo`; normal application startup only creates
-missing schema and never resets data on requests.
+The Agent database contains only signals, recommendations, and action logs.
+Customer context and business actions come from Mock Core Banking. Before this
+agent version can be deployed to AgentBase, `CORE_BANKING_BASE_URL` must point to
+an HTTPS endpoint reachable from the runtime; `localhost` and Docker Compose DNS
+names are not reachable from AgentBase.
 
-This SQLite choice is temporary demo persistence, not production-safe across
-container replacement, runtime version replacement, horizontal scaling, or
-multiple replicas. Therefore the MVP runtime must use exactly `minReplicas=1` and
-`maxReplicas=1`; multi-replica autoscaling is disabled.
+SQLite remains acceptable for the single-replica Agent audit store during the
+demo. Mock Core Banking uses MySQL 8.4 and owns durable customer state.
 
 ## Resources a deployment would create or consume
 

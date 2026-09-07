@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#ff6a25"><title>MSB · Financial Radar</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/styles.css?v=20260906-3"><link rel="stylesheet" href="/overrides.css?v=20260906-3"></head>
+<body><main class="phone">
+  <section id="login" class="login msb-screen">
+    <div class="statusbar"><b>9:41</b><span>▮▮▮⌁ ▰</span></div>
+    <header class="msb-header"><div class="msb-logo"><i><b></b><b></b><b></b></i><strong>MSB</strong></div><div class="header-tools"><button class="bell">♧<small>9</small></button><button class="lang">VN⌄</button></div></header>
+    <div class="hero-mark"><i></i><i></i><i></i><i></i><span>✦</span></div>
+    <article class="login-card glass-card"><p>Chào buổi sáng,</p><h1>Nguyễn Văn A <span>♙</span></h1><label class="customer-field">Hồ sơ demo<select id="customer"><option value="C001">C001 · Rủi ro dòng tiền</option><option value="C002">C002 · Chi tiêu bất thường</option><option value="C003">C003 · Mục tiêu tiết kiệm</option><option value="C004">C004 · Khoản định kỳ</option></select></label><button id="loginBtn" class="msb-primary"><span>⌗</span> Đăng nhập</button></article>
+    <article class="login-shortcuts glass-card"><button data-login-shortcut><i>↗</i>Chuyển tiền</button><button data-login-shortcut><i>⌗</i>Quét QR</button><button data-login-shortcut><i>♧</i>Hỗ trợ</button></article>
+    <article class="promo"><div><span>MSB | Pay</span><b>MỘT CHẠM ĐỂ<br>THANH TOÁN</b><small>Dễ dàng, an toàn và riêng tư</small></div><div class="promo-phone">MSB<br><i>✓</i></div><div class="promo-watch">●</div></article>
+    <small class="demo-caption">Môi trường mô phỏng · Không dùng dữ liệu ngân hàng thật</small>
+  </section>
+
+  <section id="app" class="app msb-screen hidden">
+    <div class="statusbar"><b>9:41</b><span>▮▮▮⌁ ▰</span></div>
+    <header class="msb-header"><div class="msb-logo"><i><b></b><b></b><b></b></i><strong>MSB</strong></div><div class="header-tools"><button class="bell">♧<small>9</small></button><button id="avatar" class="avatar">NA</button></div></header>
+    <div class="compact-mark"><i></i><i></i><i></i><span>✦</span></div>
+    <section id="home" class="page active"><div class="home-greeting"><small>Chào buổi sáng,</small><strong id="name">Khách hàng</strong></div>
+      <article class="balance glass-card"><div><span>Tài khoản thanh toán</span><button id="eye">◉</button></div><h2 id="balance">0 ₫</h2><footer><span id="account">•••• 0000</span><i>VND</i></footer></article>
+      <article class="service-grid glass-card"><button data-action="transfer"><i>↗</i>Chuyển tiền</button><button data-action="spend"><i>⌗</i>Quét QR</button><button data-action="scan"><i class="radar-tool">✦</i>Financial Radar</button><button data-go="transactions"><i>▱</i>Thẻ</button><button data-go="plans"><i>▤</i>Thanh toán</button><button data-action="more"><i>♧</i>Vay</button><footer><button><i>♕</i> Rewards</button><button><i>⌘</i> Xem thêm</button></footer></article>
+      <article class="radar-banner"><div><small>FINANCIAL RADAR</small><h3>Tài chính hôm nay<br>có gì cần chú ý?</h3><button id="heroScan">Quét ngay →</button></div><aside><i></i><b>✦</b></aside></article>
+      <div class="heading"><h3>Giao dịch gần đây</h3><button data-go="transactions">Xem tất cả</button></div><div id="recent" class="transactions skeleton"></div>
+    </section>
+
+    <section id="radar" class="page content-page"><div class="title"><div><p class="eyebrow">AI FINANCIAL ASSISTANT</p><h2>Financial Radar</h2></div><button id="refresh" class="circle">↻</button></div><article class="score"><div id="risk">--<small>RỦI RO</small></div><section><label id="radarStatus">Sẵn sàng phân tích</label><h3 id="radarTitle">Quét để nhận khuyến nghị cá nhân hóa</h3><p id="confidence">Dựa trên dữ liệu Core Banking</p></section></article><div id="scanning" class="scanning hidden"><i></i>Đang phân tích dòng tiền...</div><div id="radarResult" class="empty"><b>✦</b><h3>Radar chưa được kích hoạt</h3><p>Phân tích giao dịch, ngân sách và khoản định kỳ của bạn.</p><button id="startScan" class="msb-primary">Bắt đầu quét</button></div></section>
+    <section id="transactions" class="page content-page"><div class="title"><div><p class="eyebrow">DÒNG TIỀN</p><h2>Giao dịch</h2></div><button id="addTx" class="add">+</button></div><div class="chips"><button class="active">Tất cả</button><button>Chi tiêu</button><button>Thu nhập</button></div><div id="allTx" class="transactions"></div></section>
+    <section id="plans" class="page content-page"><div class="title"><div><p class="eyebrow">TÀI CHÍNH CÁ NHÂN</p><h2>Kế hoạch của tôi</h2></div></div><article id="financialProfile" class="financial-profile"></article><div class="chips plan-tabs"><button class="active" data-plan="profile">Tổng quan</button><button data-plan="recurring">Lịch trả tiền</button><button data-plan="goals">Mục tiêu</button><button data-plan="budgets">Ngân sách</button></div><div id="plansList"></div></section>
+    <nav><button class="active" data-page="home"><i>⌂</i>Trang chủ</button><button data-page="radar"><i class="radar-nav">✦</i>Radar</button><button data-page="transactions"><i>▱</i>Tài sản</button><button data-page="plans"><i>⚙</i>Cài đặt</button></nav>
+  </section>
+</main><div id="modal" class="modal hidden"><section><button id="close" class="close">×</button><div id="modalBody"></div></section></div><div id="toast" class="toast hidden"></div><script src="/app.js?v=20260907-3"></script></body></html>
