@@ -12,9 +12,13 @@ from corebanking.models import (
     Category,
     Customer,
     Direction,
+    CreditCard,
+    OverdraftFacility,
+    PreapprovedLoanOffer,
     RecurringEvent,
     SavingGoal,
     Transaction,
+    TermDeposit,
 )
 
 
@@ -78,12 +82,28 @@ def seed_core_banking_demo(session: Session, *, as_of: date = DEMO_AS_OF) -> Non
     session.add(SavingGoal(goal_id="G-C003-HOME", customer_id="C003", goal_name="Home deposit", target_amount=Decimal(100_000_000), current_amount=Decimal(22_000_000), start_date=_shift_month(current_month, -4), target_date=_shift_month(current_month, 8) - timedelta(days=1), monthly_contribution=Decimal(8_333_333), status="ACTIVE"))
     session.add(RecurringEvent(recurring_id="R-C004-RENT", customer_id="C004", name="Rent", category=Category.RENT, expected_amount=Decimal(8_000_000), expected_day=(as_of + timedelta(days=2)).day, frequency="MONTHLY", confidence=Decimal("0.99"), active_flag=True))
     session.add(Budget(budget_id="B-C002-FOOD", customer_id="C002", category=Category.FOOD, amount=Decimal(6_000_000), spent_amount=Decimal(5_000_000), alert_threshold=Decimal("0.80"), start_date=current_month, end_date=current_month.replace(day=calendar.monthrange(as_of.year, as_of.month)[1]), status="ACTIVE"))
+    session.add_all([
+        OverdraftFacility(facility_id="OD-C004-001", customer_id="C004", account_id="A-C004", credit_limit=Decimal(10_000_000), used_amount=Decimal(0), annual_interest_rate=Decimal("0.18"), expires_at=_shift_month(as_of, 12), status="ACTIVE"),
+        TermDeposit(deposit_id="TD-C004-001", customer_id="C004", product_name="Tiết kiệm M-First", current_balance=Decimal(30_000_000), available_withdrawal_amount=Decimal(10_000_000), interest_rate=Decimal("0.052"), early_withdrawal_rate=Decimal("0.005"), opened_at=_shift_month(as_of, -3), maturity_date=_shift_month(as_of, 3), partial_withdrawal_allowed=True, status="ACTIVE"),
+        CreditCard(card_id="CC-C004-001", customer_id="C004", masked_number="•••• 8899", product_name="MSB Mastercard", credit_limit=Decimal(30_000_000), outstanding_amount=Decimal(4_500_000), payment_due_day=20, status="ACTIVE"),
+        PreapprovedLoanOffer(offer_id="LO-C004-001", customer_id="C004", product_code="QUICK_CASH", display_name="Khoản vay ngắn hạn", approved_limit=Decimal(15_000_000), minimum_amount=Decimal(2_000_000), annual_interest_rate=Decimal("0.24"), term_months=3, valid_until=_shift_month(as_of, 1), eligibility_status="ELIGIBLE", status="ACTIVE"),
+    ])
     session.commit()
 
 
 def seed_core_banking_if_empty(session: Session) -> bool:
     count = session.scalar(select(func.count()).select_from(Customer)) or 0
     if count:
+        customer = session.get(Customer, "C004")
+        if customer and session.get(OverdraftFacility, "OD-C004-001") is None:
+            as_of = datetime.now(BUSINESS_TIMEZONE).date()
+            session.add_all([
+                OverdraftFacility(facility_id="OD-C004-001", customer_id="C004", account_id="A-C004", credit_limit=Decimal(10_000_000), used_amount=Decimal(0), annual_interest_rate=Decimal("0.18"), expires_at=_shift_month(as_of, 12), status="ACTIVE"),
+                TermDeposit(deposit_id="TD-C004-001", customer_id="C004", product_name="Tiết kiệm M-First", current_balance=Decimal(30_000_000), available_withdrawal_amount=Decimal(10_000_000), interest_rate=Decimal("0.052"), early_withdrawal_rate=Decimal("0.005"), opened_at=_shift_month(as_of, -3), maturity_date=_shift_month(as_of, 3), partial_withdrawal_allowed=True, status="ACTIVE"),
+                CreditCard(card_id="CC-C004-001", customer_id="C004", masked_number="•••• 8899", product_name="MSB Mastercard", credit_limit=Decimal(30_000_000), outstanding_amount=Decimal(4_500_000), payment_due_day=20, status="ACTIVE"),
+                PreapprovedLoanOffer(offer_id="LO-C004-001", customer_id="C004", product_code="QUICK_CASH", display_name="Khoản vay ngắn hạn", approved_limit=Decimal(15_000_000), minimum_amount=Decimal(2_000_000), annual_interest_rate=Decimal("0.24"), term_months=3, valid_until=_shift_month(as_of, 1), eligibility_status="ELIGIBLE", status="ACTIVE"),
+            ])
+            session.commit()
         return False
     seed_core_banking_demo(session, as_of=datetime.now(BUSINESS_TIMEZONE).date())
     return True

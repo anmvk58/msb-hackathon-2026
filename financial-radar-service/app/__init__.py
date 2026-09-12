@@ -1,2 +1,1 @@
-"""MSB Financial Radar backend."""
-
+"""MSB Financial Sensing backend."""

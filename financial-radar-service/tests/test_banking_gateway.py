@@ -52,6 +52,7 @@ def test_agent_metadata_contains_no_core_banking_tables() -> None:
 
     assert set(Base.metadata.tables) == {
         "radar_signals",
+        "radar_scan_runs",
         "agent_recommendations",
         "agent_action_logs",
     }

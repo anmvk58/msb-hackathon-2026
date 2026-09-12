@@ -24,6 +24,8 @@ class CountingLLM:
     def generate_structured(self, **_: object) -> LLMRecommendationDecision:
         self.calls += 1
         return LLMRecommendationDecision(
+            risk_level="HIGH",
+            alert_summary="Dòng tiền cần được chú ý.",
             summary="Grounded recommendation",
             recommended_option_id="A",
             reasoning_summary="Deterministic test decision",

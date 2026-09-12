@@ -24,6 +24,7 @@ def test_registry_exposes_exact_mvp_tools() -> None:
         "create_budget",
         "create_reminder",
         "update_goal",
+        "prepare_funding_option",
     }
 
 
@@ -80,4 +81,3 @@ def test_state_machine_valid_prepare_flow() -> None:
     ):
         state.transition(lifecycle)
     assert state.state == AgentLifecycle.EXECUTED
-

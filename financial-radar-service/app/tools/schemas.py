@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -25,6 +25,7 @@ class FinancialSnapshotOutput(BaseModel):
     customer_id: str
     customer_name: str
     monthly_income: Decimal
+    salary_day: int
     safe_balance: Decimal
     total_available_balance: Decimal
     currency: str
@@ -138,6 +139,24 @@ class UpdateGoalOutput(BaseModel):
     customer_id: str
     monthly_contribution: Decimal
     target_date: date
+
+
+class PrepareFundingInput(CustomerInput):
+    option_type: Literal["OVERDRAFT", "PARTIAL_SAVING_WITHDRAWAL", "SHORT_TERM_LOAN"]
+    reference_id: str
+    amount: Decimal = Field(gt=0)
+
+
+class PrepareFundingOutput(BaseModel):
+    status: str
+    customer_id: str
+    option_type: str
+    reference_id: str
+    amount: Decimal
+    account_available_balance: Decimal | None = None
+    used_amount: Decimal | None = None
+    available_limit: Decimal | None = None
+    transaction_id: str | None = None
 
 
 class ToolInvocation(BaseModel):

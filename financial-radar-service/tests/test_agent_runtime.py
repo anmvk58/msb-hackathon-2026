@@ -1,15 +1,39 @@
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.local_runtime import LocalAgentRuntime
+from app.agent.local_runtime import LocalAgentRuntime, _liquidity_context
 from app.agent.state import AgentLifecycle
 from app.models import AgentActionLog
 from tests.fakes import FakeBankingGateway
 
 
 AS_OF = date(2026, 9, 1)
+
+
+def test_liquidity_flags_detect_obligation_before_income() -> None:
+    result = _liquidity_context(
+        snapshot=SimpleNamespace(
+            salary_day=25, total_available_balance=Decimal("7200000")
+        ),
+        recurring=SimpleNamespace(
+            events=[
+                SimpleNamespace(
+                    expected_date=date(2026, 9, 13),
+                    expected_amount=Decimal("10000000"),
+                )
+            ]
+        ),
+        as_of=date(2026, 9, 12),
+    )
+
+    assert result["has_upcoming_obligation"] is True
+    assert result["has_liquidity_shortfall"] is True
+    assert result["has_income_timing_gap"] is True
+    assert result["liquidity_gap"] == "2800000"
+    assert result["next_income_date"] == "2026-09-25"
 
 
 def test_agent_run_returns_grounded_recommendation(session: Session) -> None:
@@ -107,4 +131,5 @@ def test_all_agent_tool_calls_are_traced(session: Session) -> None:
         "forecast_cashflow",
         "detect_spending_anomaly",
         "detect_upcoming_recurring",
+        "simulate_goal_scenarios",
     }

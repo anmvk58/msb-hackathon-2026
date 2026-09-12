@@ -54,6 +54,8 @@ def decision_transport(option_id: str = "A") -> httpx.MockTransport:
                         "message": {
                             "content": json.dumps(
                                 {
+                                    "risk_level": "HIGH",
+                                    "alert_summary": "Dòng tiền sắp xuống dưới mức an toàn.",
                                     "summary": "Dòng tiền có nguy cơ xuống dưới mức an toàn.",
                                     "recommended_option_id": option_id,
                                     "reasoning_summary": "Ưu tiên kiểm soát shopping theo evidence.",
@@ -159,6 +161,8 @@ def test_greennode_llm_accepts_fenced_json_without_storing_preamble() -> None:
                             "content": "Result:\n```json\n"
                             + json.dumps(
                                 {
+                                    "risk_level": "MEDIUM",
+                                    "alert_summary": "A short alert",
                                     "summary": "Safe summary",
                                     "recommended_option_id": "A",
                                     "reasoning_summary": "Audit-safe reason",
@@ -185,6 +189,8 @@ def test_greennode_llm_accepts_fenced_json_without_storing_preamble() -> None:
         context={},
     )
     assert decision.model_dump() == {
+        "risk_level": "MEDIUM",
+        "alert_summary": "A short alert",
         "summary": "Safe summary",
         "recommended_option_id": "A",
         "reasoning_summary": "Audit-safe reason",
@@ -207,6 +213,8 @@ def test_llm_cannot_introduce_unknown_option(session: Session, fake_banking_gate
         },
     )
     decision = LLMRecommendationDecision(
+        risk_level="HIGH",
+        alert_summary="malicious",
         summary="malicious",
         recommended_option_id="TRANSFER_MONEY",
         reasoning_summary="malicious",
@@ -225,6 +233,8 @@ def test_llm_cannot_modify_financial_amount() -> None:
                         "message": {
                             "content": json.dumps(
                                 {
+                                    "risk_level": "HIGH",
+                                    "alert_summary": "try mutation",
                                     "summary": "try mutation",
                                     "recommended_option_id": "A",
                                     "reasoning_summary": "try mutation",

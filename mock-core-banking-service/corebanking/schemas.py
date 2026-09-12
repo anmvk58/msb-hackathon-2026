@@ -51,6 +51,48 @@ class AccountRead(ORMModel):
     updated_at: datetime
 
 
+class OverdraftRead(ORMModel):
+    facility_id: str; customer_id: str; account_id: str
+    credit_limit: Decimal; used_amount: Decimal
+    annual_interest_rate: Decimal; expires_at: date; status: str
+
+
+class OverdraftDrawRequest(BaseModel):
+    amount: Decimal = Field(gt=0, le=Decimal("1000000000"))
+
+
+class OverdraftDrawResponse(BaseModel):
+    status: str
+    facility_id: str
+    account_id: str
+    amount: Decimal
+    account_available_balance: Decimal
+    used_amount: Decimal
+    available_limit: Decimal
+    transaction_id: str
+
+
+class TermDepositRead(ORMModel):
+    deposit_id: str; customer_id: str; product_name: str
+    current_balance: Decimal; available_withdrawal_amount: Decimal
+    interest_rate: Decimal; early_withdrawal_rate: Decimal
+    opened_at: date; maturity_date: date
+    partial_withdrawal_allowed: bool; status: str
+
+
+class CreditCardRead(ORMModel):
+    card_id: str; customer_id: str; masked_number: str; product_name: str
+    credit_limit: Decimal; outstanding_amount: Decimal
+    payment_due_day: int; status: str
+
+
+class LoanOfferRead(ORMModel):
+    offer_id: str; customer_id: str; product_code: str; display_name: str
+    approved_limit: Decimal; minimum_amount: Decimal
+    annual_interest_rate: Decimal; term_months: int; valid_until: date
+    eligibility_status: str; status: str
+
+
 class TransactionRead(ORMModel):
     transaction_id: str
     customer_id: str
@@ -246,4 +288,8 @@ class FinancialContext(BaseModel):
     recurring_events: list[RecurringEventRead]
     active_budgets: list[BudgetRead]
     active_goals: list[GoalRead]
+    overdraft_facilities: list[OverdraftRead]
+    term_deposits: list[TermDepositRead]
+    credit_cards: list[CreditCardRead]
+    preapproved_loan_offers: list[LoanOfferRead]
     generated_at: datetime

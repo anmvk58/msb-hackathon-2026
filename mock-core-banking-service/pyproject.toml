@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "msb-mock-core-banking"
 version = "0.1.0"
-description = "Mock Core Banking service for the MSB Financial Radar demo"
+description = "Mock Core Banking service for the MSB Financial Sensing demo"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<0.117",

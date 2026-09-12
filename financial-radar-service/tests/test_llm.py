@@ -14,6 +14,7 @@ def test_mock_llm_validates_structured_output() -> None:
             "grounded_candidate": {
                 "problem": "Cashflow risk",
                 "severity": "HIGH",
+                "alert_summary": "Your balance may fall below the safe level.",
                 "summary": "Forecast is below safe balance.",
                 "evidence": [
                     {"source": "forecast_cashflow", "metric": "gap", "value": -1}
@@ -39,4 +40,3 @@ def test_mock_llm_validates_structured_output() -> None:
 def test_unconfigured_llm_fails_fast() -> None:
     with pytest.raises(LLMNotConfiguredError):
         UnconfiguredLLMClient().generate(system_prompt="", user_prompt="")
-

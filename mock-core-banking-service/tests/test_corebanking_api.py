@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from corebanking.database import CoreBankingBase, get_core_banking_db
 from corebanking.main import app
-from corebanking.models import Account, Budget, Reminder, SavingGoal, Transaction
+from corebanking.models import Account, Budget, OverdraftFacility, Reminder, SavingGoal, Transaction
 from corebanking.seed import seed_core_banking_demo
 
 
@@ -87,6 +87,26 @@ def test_transaction_rejects_insufficient_balance(core_client: TestClient) -> No
     )
     assert response.status_code == 409
     assert response.json()["detail"] == "Insufficient available balance"
+
+
+def test_overdraft_draw_increases_payment_balance_and_reduces_available_limit(
+    core_client: TestClient, core_session: Session
+) -> None:
+    endpoint = "/api/customers/C004/overdraft-facilities/OD-C004-001/draw"
+    headers = {"Idempotency-Key": "agent-overdraft-A004"}
+
+    first = core_client.post(endpoint, json={"amount": "2000000"}, headers=headers)
+    second = core_client.post(endpoint, json={"amount": "2000000"}, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["transaction_id"] == second.json()["transaction_id"]
+    assert first.json()["account_available_balance"] == "9200000.00"
+    assert first.json()["used_amount"] == "2000000.00"
+    assert first.json()["available_limit"] == "8000000.00"
+    assert core_session.get(Account, "A-C004").available_balance == 9_200_000
+    assert core_session.get(OverdraftFacility, "OD-C004-001").used_amount == 2_000_000
+    assert core_session.query(Transaction).filter(Transaction.transaction_type == "OVERDRAFT_DRAW").count() == 1
 
 
 def test_budget_is_applied_and_tracks_period_spending(

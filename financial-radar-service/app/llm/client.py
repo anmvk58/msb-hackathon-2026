@@ -76,8 +76,22 @@ class MockLLMClient:
         plan = context.get("candidate_plan")
         if plan is None:
             raise ValueError("MockLLMClient requires candidate_plan context")
+        alert_summaries = {
+            "CASHFLOW_RISK": "Số dư dự kiến có thể không đủ để duy trì mức an toàn.",
+            "SPENDING_ANOMALY": "Một nhóm chi tiêu gần đây có dấu hiệu cần lưu ý.",
+            "GOAL_DRIFT": "Tiến độ mục tiêu tài chính có thể chưa đạt như dự kiến.",
+            "UPCOMING_RECURRING": "Bạn có một khoản thanh toán định kỳ sắp đến hạn.",
+        }
         return response_model.model_validate(
             {
+                # The mock remains deterministic for local development. Real severity
+                # classification is performed by the configured LLM provider.
+                "risk_level": (
+                    "HIGH" if plan["problem"] == "CASHFLOW_RISK" else "MEDIUM"
+                ),
+                "alert_summary": alert_summaries.get(
+                    plan["problem"], "Tình hình tài chính của bạn có một điểm cần lưu ý."
+                ),
                 "summary": plan["summary_hint"],
                 "recommended_option_id": plan["default_option_id"],
                 "reasoning_summary": plan["reasoning_hint"],

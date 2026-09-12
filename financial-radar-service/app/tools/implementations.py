@@ -10,7 +10,7 @@ from app.tools.schemas import (
     CreateReminderInput, CreateReminderOutput, FinancialSnapshotInput,
     FinancialSnapshotOutput, GoalSimulationInput, GoalSimulationOutput,
     RecurringInput, RecurringOutput, SpendingAnomalyInput, SpendingAnomalyOutput,
-    UpdateGoalInput, UpdateGoalOutput,
+    UpdateGoalInput, UpdateGoalOutput, PrepareFundingInput, PrepareFundingOutput,
 )
 
 
@@ -28,12 +28,13 @@ class GetFinancialSnapshotTool(GatewayTool):
     output_model = FinancialSnapshotOutput
 
     def execute(self, session: Session, arguments: FinancialSnapshotInput, *, idempotency_key: str | None = None) -> FinancialSnapshotOutput:
-        del session, idempotency_key
+        del session
         context = self.gateway.get_financial_context(arguments.customer_id)
         currency = context.accounts[0].currency if context.accounts else "VND"
         return FinancialSnapshotOutput(
             customer_id=context.customer.customer_id, customer_name=context.customer.customer_name,
-            monthly_income=context.customer.monthly_income, safe_balance=context.customer.preferred_safe_balance,
+            monthly_income=context.customer.monthly_income, salary_day=context.customer.salary_day,
+            safe_balance=context.customer.preferred_safe_balance,
             total_available_balance=sum((item.available_balance for item in context.accounts), Decimal(0)),
             currency=currency, active_goal_count=len(context.active_goals), active_budget_count=len(context.active_budgets),
         )
@@ -138,10 +139,36 @@ class UpdateGoalTool(GatewayTool):
         return UpdateGoalOutput(status="SUCCESS", goal_id=result["goal_id"], customer_id=result["customer_id"], monthly_contribution=result["monthly_contribution"], target_date=result["target_date"])
 
 
+class PrepareFundingOptionTool(GatewayTool):
+    name = "prepare_funding_option"
+    description = "Prepare a verified funding option for explicit customer confirmation."
+    risk_level = RiskLevel.HIGH
+    confirmation_policy = ConfirmationPolicy.EXPLICIT
+    input_model = PrepareFundingInput
+    output_model = PrepareFundingOutput
+
+    def execute(self, session: Session, arguments: PrepareFundingInput, *, idempotency_key: str | None = None) -> PrepareFundingOutput:
+        del session, idempotency_key
+        context = self.gateway.get_financial_context(arguments.customer_id)
+        valid = {
+            "OVERDRAFT": {x.facility_id: x.credit_limit - x.used_amount for x in context.overdraft_facilities if x.status == "ACTIVE"},
+            "PARTIAL_SAVING_WITHDRAWAL": {x.deposit_id: x.available_withdrawal_amount for x in context.term_deposits if x.status == "ACTIVE" and x.partial_withdrawal_allowed},
+            "SHORT_TERM_LOAN": {x.offer_id: x.approved_limit for x in context.preapproved_loan_offers if x.status == "ACTIVE" and x.eligibility_status == "ELIGIBLE"},
+        }
+        available = valid[arguments.option_type].get(arguments.reference_id)
+        if available is None or arguments.amount > available:
+            raise ValueError("Funding option is unavailable or insufficient")
+        if arguments.option_type == "OVERDRAFT":
+            result = self.gateway.draw_overdraft(arguments.customer_id, arguments.reference_id, str(arguments.amount), idempotency_key=idempotency_key)
+            return PrepareFundingOutput(status=result["status"], **arguments.model_dump(), account_available_balance=result["account_available_balance"], used_amount=result["used_amount"], available_limit=result["available_limit"], transaction_id=result["transaction_id"])
+        return PrepareFundingOutput(status="PREPARED", **arguments.model_dump())
+
+
 def build_mvp_tools(gateway: BankingGateway) -> tuple[GatewayTool, ...]:
     return (
         GetFinancialSnapshotTool(gateway), DetectSpendingAnomalyTool(gateway),
         DetectRecurringTool(gateway), ForecastCashflowTool(gateway),
         SimulateGoalScenariosTool(gateway), CreateBudgetTool(gateway),
         CreateReminderTool(gateway), UpdateGoalTool(gateway),
+        PrepareFundingOptionTool(gateway),
     )

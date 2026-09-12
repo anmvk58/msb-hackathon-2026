@@ -11,10 +11,10 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    app_name: str = "MSB Financial Radar"
+    app_name: str = "MSB Financial Sensing"
     app_env: str = "development"
     agent_runtime: str = "local"
-    database_url: str = "sqlite:///./financial_radar.db"
+    database_url: str = "postgresql+psycopg://financial_radar:financial_radar@localhost:5433/financial_radar"
     sql_echo: bool = False
 
     core_banking_base_url: str = "http://localhost:8090"
@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 60
     llm_structured_retries: int = 2
     agent_recommendation_ttl_seconds: int = 900
+    scheduler_interval_seconds: int = 180
+    scheduler_customer_ids: str = "C001,C002,C003,C004"
+
+    @property
+    def scheduler_customers(self) -> list[str]:
+        return [item.strip() for item in self.scheduler_customer_ids.split(",") if item.strip()]
 
     greennode_client_id: str | None = None
     greennode_client_secret: str | None = Field(default=None, repr=False)
@@ -72,6 +78,10 @@ class Settings(BaseSettings):
             raise ValueError("AGENT_RUNTIME=greennode requires LLM_PROVIDER=greennode")
         if self.agent_recommendation_ttl_seconds <= 0:
             raise ValueError("AGENT_RECOMMENDATION_TTL_SECONDS must be greater than zero")
+        if self.scheduler_interval_seconds <= 0:
+            raise ValueError("SCHEDULER_INTERVAL_SECONDS must be greater than zero")
+        if not self.scheduler_customers:
+            raise ValueError("SCHEDULER_CUSTOMER_IDS must include at least one customer")
         if not self.core_banking_base_url.startswith(("http://", "https://")):
             raise ValueError("CORE_BANKING_BASE_URL must be an HTTP(S) URL")
         if self.core_banking_timeout_seconds <= 0:

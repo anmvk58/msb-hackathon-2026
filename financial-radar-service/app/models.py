@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, JSON, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -48,6 +48,36 @@ class RecommendationStatus(StrEnum):
     SELECTED = "SELECTED"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
+
+
+class ScanTrigger(StrEnum):
+    SCHEDULED = "SCHEDULED"
+    MANUAL = "MANUAL"
+
+
+class ScanStatus(StrEnum):
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class RadarScanRun(Base):
+    __tablename__ = "radar_scan_runs"
+    __table_args__ = (
+        Index("ix_radar_scan_customer_completed", "customer_id", "status", "completed_at"),
+    )
+
+    scan_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(String(32), index=True)
+    trigger_type: Mapped[ScanTrigger] = mapped_column(Enum(ScanTrigger, native_enum=False), index=True)
+    status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus, native_enum=False), index=True)
+    risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    alert_summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class RadarSignal(Base):

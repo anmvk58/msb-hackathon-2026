@@ -1,7 +1,7 @@
 # Mock Core Banking service
 
 The mock service owns the customer-facing banking data used by the demo. It is
-separate from Financial Radar so the agent can eventually consume customer
+separate from Financial Sensing so the agent can eventually consume customer
 context and apply confirmed actions through HTTP instead of reading or writing
 the banking database directly.
 
@@ -9,7 +9,7 @@ the banking database directly.
 
 Core Banking owns `customers`, `accounts`, `transactions`, `recurring_events`,
 `budgets`, `saving_goals`, `reminders`, and request idempotency records.
-Financial Radar continues to own `radar_signals`, `agent_recommendations`, and
+Financial Sensing continues to own `radar_signals`, `agent_recommendations`, and
 `agent_action_logs`.
 
 All data is synthetic. Demo login is not production authentication.
@@ -61,7 +61,7 @@ the action twice.
 
 ## Phase boundary
 
-Financial Radar now uses an HTTP `BankingGateway` for every customer read and
+Financial Sensing now uses an HTTP `BankingGateway` for every customer read and
 confirmed action. Its own database keeps only signals, recommendations, and
 action audit data. For local Compose networking, the agent uses:
 

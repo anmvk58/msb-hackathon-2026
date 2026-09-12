@@ -39,6 +39,24 @@ services:
       retries: 5
       start_period: 5s
 
+  financial-radar-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${FINANCIAL_RADAR_DB_NAME:-financial_radar}
+      POSTGRES_USER: ${FINANCIAL_RADAR_DB_USER:-financial_radar}
+      POSTGRES_PASSWORD: ${FINANCIAL_RADAR_DB_PASSWORD:-financial_radar}
+    ports:
+      - "5433:5432"
+    volumes:
+      - financial-radar-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
   financial-radar-agent:
     build:
       context: ./financial-radar-service
@@ -49,24 +67,50 @@ services:
       TZ: Asia/Ho_Chi_Minh
       APP_ENV: development
       AGENT_RUNTIME: ${AGENT_RUNTIME:-local}
-      DATABASE_URL: sqlite:////data/financial-radar-agent.db
+      DATABASE_URL: postgresql+psycopg://${FINANCIAL_RADAR_DB_USER:-financial_radar}:${FINANCIAL_RADAR_DB_PASSWORD:-financial_radar}@financial-radar-db:5432/${FINANCIAL_RADAR_DB_NAME:-financial_radar}
       CORE_BANKING_BASE_URL: http://corebanking:8090
       CORE_BANKING_TIMEOUT_SECONDS: "10"
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
     depends_on:
       corebanking:
         condition: service_healthy
+      financial-radar-db:
+        condition: service_healthy
     restart: on-failure
     ports:
       - "8080:8080"
-    volumes:
-      - financial-radar-agent-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 5s
+
+  financial-radar-scheduler:
+    build:
+      context: ./financial-radar-service
+      dockerfile: Dockerfile
+    command: ["python", "scheduler.py"]
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      APP_ENV: development
+      AGENT_RUNTIME: ${AGENT_RUNTIME:-local}
+      DATABASE_URL: postgresql+psycopg://${FINANCIAL_RADAR_DB_USER:-financial_radar}:${FINANCIAL_RADAR_DB_PASSWORD:-financial_radar}@financial-radar-db:5432/${FINANCIAL_RADAR_DB_NAME:-financial_radar}
+      CORE_BANKING_BASE_URL: http://corebanking:8090
+      CORE_BANKING_TIMEOUT_SECONDS: "10"
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-180}
+      SCHEDULER_CUSTOMER_IDS: ${SCHEDULER_CUSTOMER_IDS:-C001,C002,C003,C004}
+    depends_on:
+      financial-radar-agent:
+        condition: service_healthy
+      financial-radar-db:
+        condition: service_healthy
+      corebanking:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend-mobile:
     build:
@@ -83,4 +127,4 @@ services:
 
 volumes:
   corebanking-mysql-data:
-  financial-radar-agent-data:
+  financial-radar-postgres-data:

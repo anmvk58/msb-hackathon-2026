@@ -16,7 +16,7 @@ from corebanking.database import (
     get_core_banking_db,
 )
 from corebanking.idempotency import remember, replay
-from corebanking.models import Account, Budget, Customer, Direction, RecurringEvent, Reminder, SavingGoal, Transaction
+from corebanking.models import Account, Budget, Category, CreditCard, Customer, Direction, OverdraftFacility, PreapprovedLoanOffer, RecurringEvent, Reminder, SavingGoal, TermDeposit, Transaction
 from corebanking.schemas import (
     AccountRead,
     BudgetCreate,
@@ -26,6 +26,8 @@ from corebanking.schemas import (
     DemoLoginRequest,
     DemoLoginResponse,
     FinancialContext,
+    CreditCardRead, LoanOfferRead, OverdraftRead, OverdraftDrawRequest,
+    OverdraftDrawResponse, TermDepositRead,
     GoalRead,
     GoalCreate,
     GoalUpdate,
@@ -43,7 +45,7 @@ from corebanking.seed import seed_core_banking_if_empty
 
 DESCRIPTION = """
 Mock Core Banking API sở hữu dữ liệu nghiệp vụ cho Mobile Banking demo và
-Financial Radar Agent.
+Financial Sensing Agent.
 
 ### Phạm vi
 - Dữ liệu hoàn toàn giả lập (`C001`–`C004`), không kết nối hệ thống MSB thật.
@@ -55,7 +57,7 @@ Financial Radar Agent.
 TAGS = [
     {"name": "System", "description": "Health và thông tin service."},
     {"name": "Demo auth", "description": "Đăng nhập giả lập cho Mobile Banking demo."},
-    {"name": "Customer context", "description": "Context tổng hợp dành cho Financial Radar Agent."},
+    {"name": "Customer context", "description": "Context tổng hợp dành cho Financial Sensing Agent."},
     {"name": "Accounts", "description": "Tài khoản và số dư của khách hàng."},
     {"name": "Transactions", "description": "Lịch sử và giao dịch mô phỏng."},
     {"name": "Recurring events", "description": "Lịch trả tiền định kỳ do khách hàng thiết lập."},
@@ -132,6 +134,10 @@ def financial_context(
     recurring = list(session.scalars(select(RecurringEvent).where(RecurringEvent.customer_id == customer_id, RecurringEvent.active_flag.is_(True))).all())
     budgets = list(session.scalars(select(Budget).where(Budget.customer_id == customer_id, Budget.status == "ACTIVE")).all())
     goals = list(session.scalars(select(SavingGoal).where(SavingGoal.customer_id == customer_id, SavingGoal.status == "ACTIVE")).all())
+    overdrafts = list(session.scalars(select(OverdraftFacility).where(OverdraftFacility.customer_id == customer_id, OverdraftFacility.status == "ACTIVE")).all())
+    deposits = list(session.scalars(select(TermDeposit).where(TermDeposit.customer_id == customer_id, TermDeposit.status == "ACTIVE")).all())
+    cards = list(session.scalars(select(CreditCard).where(CreditCard.customer_id == customer_id, CreditCard.status == "ACTIVE")).all())
+    offers = list(session.scalars(select(PreapprovedLoanOffer).where(PreapprovedLoanOffer.customer_id == customer_id, PreapprovedLoanOffer.status == "ACTIVE")).all())
     return FinancialContext(
         customer=CustomerRead.model_validate(customer),
         accounts=[AccountRead.model_validate(item) for item in accounts],
@@ -139,6 +145,10 @@ def financial_context(
         recurring_events=[RecurringEventRead.model_validate(item) for item in recurring],
         active_budgets=[BudgetRead.model_validate(item) for item in budgets],
         active_goals=[GoalRead.model_validate(item) for item in goals],
+        overdraft_facilities=[OverdraftRead.model_validate(item) for item in overdrafts],
+        term_deposits=[TermDepositRead.model_validate(item) for item in deposits],
+        credit_cards=[CreditCardRead.model_validate(item) for item in cards],
+        preapproved_loan_offers=[LoanOfferRead.model_validate(item) for item in offers],
         generated_at=datetime.utcnow(),
     )
 
@@ -189,6 +199,43 @@ def update_recurring_event(customer_id: str, recurring_id: str, payload: Recurri
 def get_accounts(customer_id: str, session: DbSession) -> list[Account]:
     _customer_or_404(session, customer_id)
     return list(session.scalars(select(Account).where(Account.customer_id == customer_id)).all())
+
+
+@app.post("/api/customers/{customer_id}/overdraft-facilities/{facility_id}/draw", response_model=OverdraftDrawResponse, tags=["Accounts"], summary="Sử dụng hạn mức thấu chi")
+def draw_overdraft(customer_id: str, facility_id: str, payload: OverdraftDrawRequest, session: DbSession, idempotency_key: IdempotencyKey = None) -> OverdraftDrawResponse:
+    operation = f"draw-overdraft:{customer_id}:{facility_id}"
+    cached = replay(session, operation=operation, key=idempotency_key, response_model=OverdraftDrawResponse)
+    if cached:
+        return cached
+    _customer_or_404(session, customer_id)
+    facility = session.scalar(
+        select(OverdraftFacility)
+        .where(OverdraftFacility.facility_id == facility_id)
+        .with_for_update()
+    )
+    if facility is None or facility.customer_id != customer_id:
+        raise HTTPException(status_code=404, detail="Overdraft facility not found for customer")
+    if facility.status != "ACTIVE" or facility.expires_at < datetime.utcnow().date():
+        raise HTTPException(status_code=409, detail="Overdraft facility is not active")
+    available_limit = facility.credit_limit - facility.used_amount
+    if payload.amount > available_limit:
+        raise HTTPException(status_code=409, detail="Insufficient overdraft limit")
+    account = session.scalar(
+        select(Account)
+        .where(Account.account_id == facility.account_id)
+        .with_for_update()
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Linked payment account not found")
+    facility.used_amount += payload.amount
+    account.available_balance += payload.amount
+    account.updated_at = datetime.utcnow()
+    transaction = Transaction(transaction_id=f"TX-{uuid4().hex[:12].upper()}", customer_id=customer_id, account_id=account.account_id, transaction_date=datetime.utcnow().date(), amount=payload.amount, direction=Direction.CREDIT, merchant="MSB", description="Giải ngân hạn mức thấu chi", category=Category.TRANSFER, transaction_type="OVERDRAFT_DRAW", created_at=datetime.utcnow())
+    session.add(transaction)
+    response = OverdraftDrawResponse(status="SUCCESS", facility_id=facility.facility_id, account_id=account.account_id, amount=payload.amount, account_available_balance=account.available_balance, used_amount=facility.used_amount, available_limit=facility.credit_limit - facility.used_amount, transaction_id=transaction.transaction_id)
+    remember(session, operation=operation, key=idempotency_key, response=response)
+    session.commit()
+    return response
 
 
 @app.get("/api/customers/{customer_id}/transactions", response_model=list[TransactionRead], tags=["Transactions"], summary="Lấy lịch sử giao dịch")

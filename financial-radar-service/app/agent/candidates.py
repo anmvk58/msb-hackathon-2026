@@ -174,12 +174,34 @@ class CandidateActionGenerator:
                 }
             )
         event = analysis["events"][0]
+        context = self.gateway.get_financial_context(customer_id)
+        required = max(
+            Decimal(str(event["expected_amount"]))
+            - sum((account.available_balance for account in context.accounts), Decimal(0)),
+            Decimal(0),
+        )
+        funding_options = []
+        overdraft = next((x for x in context.overdraft_facilities if x.status == "ACTIVE" and x.credit_limit - x.used_amount >= required), None)
+        deposit = next((x for x in context.term_deposits if x.status == "ACTIVE" and x.partial_withdrawal_allowed and x.available_withdrawal_amount >= required), None)
+        loan = next((x for x in context.preapproved_loan_offers if x.status == "ACTIVE" and x.eligibility_status == "ELIGIBLE" and x.minimum_amount <= required <= x.approved_limit), None)
+        if required > 0 and overdraft:
+            funding_options.append({"title": "Dùng hạn mức còn lại ở tài khoản thấu chi", "description": "Chuyển phần tiền còn thiếu từ hạn mức thấu chi vào tài khoản thanh toán.", "option_type": "OVERDRAFT", "reference_id": overdraft.facility_id, "impact": f"Số dư tài khoản thanh toán tăng {_vnd(required)} VND và hạn mức thấu chi còn lại giảm tương ứng; lãi suất {Decimal(overdraft.annual_interest_rate) * 100:.1f}%/năm."})
+        if required > 0 and deposit:
+            funding_options.append({"title": "Rút một phần tiền tiết kiệm", "description": "Dùng một phần khoản tiết kiệm để thanh toán đúng hạn.", "option_type": "PARTIAL_SAVING_WITHDRAWAL", "reference_id": deposit.deposit_id, "impact": f"Rút {_vnd(required)} VND; phần rút trước hạn hưởng lãi suất {Decimal(deposit.early_withdrawal_rate) * 100:.1f}%/năm."})
+        if required > 0 and loan:
+            funding_options.append({"title": "Đăng ký khoản vay ngắn hạn", "description": "Sử dụng đề nghị vay đã được duyệt sẵn trên ứng dụng.", "option_type": "SHORT_TERM_LOAN", "reference_id": loan.offer_id, "impact": f"Vay {_vnd(required)} VND trong {loan.term_months} tháng; lãi suất {Decimal(loan.annual_interest_rate) * 100:.1f}%/năm."})
+        options = [
+            {"option_id": chr(ord("A") + index), "title": item["title"], "description": item["description"], "action_type": "prepare_funding_option", "parameters": {"customer_id": customer_id, "option_type": item["option_type"], "reference_id": item["reference_id"], "amount": str(required)}, "expected_impact": item["impact"]}
+            for index, item in enumerate(funding_options[:3])
+        ]
+        if not options:
+            options = [{"option_id": "A", "title": "Tạo nhắc nhở", "description": "Nhắc kiểm tra số dư trước hạn.", "action_type": "create_reminder", "parameters": {"customer_id": customer_id, "title": f"Chuẩn bị {event['name']}", "remind_at": datetime.combine(as_of + timedelta(days=1), time(9)).isoformat(), "message": f"Khoản {event['name']} sắp đến hạn."}, "expected_impact": "Giảm nguy cơ bỏ lỡ khoản định kỳ."}]
         return CandidateActionPlan.model_validate(
             {
                 "problem": "UPCOMING_RECURRING",
                 "severity": "MEDIUM",
                 "summary_hint": f"{event['name']} trị giá {_vnd(event['expected_amount'])} VND đến hạn sau {event['days_until']} ngày.",
-                "reasoning_hint": "Nhắc nhở là hành động low-risk phù hợp evidence.",
+                "reasoning_hint": "Chỉ chọn nguồn tiền đã được Core Banking xác nhận là có sẵn.",
                 "evidence": [
                     {
                         "source": "detect_upcoming_recurring",
@@ -188,21 +210,7 @@ class CandidateActionGenerator:
                         "context": event,
                     }
                 ],
-                "candidate_options": [
-                    {
-                        "option_id": "A",
-                        "title": "Tạo nhắc nhở",
-                        "description": "Nhắc kiểm tra số dư trước hạn.",
-                        "action_type": "create_reminder",
-                        "parameters": {
-                            "customer_id": customer_id,
-                            "title": f"Chuẩn bị {event['name']}",
-                            "remind_at": datetime.combine(as_of + timedelta(days=1), time(9)).isoformat(),
-                            "message": f"Khoản {event['name']} sắp đến hạn.",
-                        },
-                        "expected_impact": "Giảm nguy cơ bỏ lỡ khoản định kỳ.",
-                    }
-                ],
+                "candidate_options": options,
                 "default_option_id": "A",
             }
         )

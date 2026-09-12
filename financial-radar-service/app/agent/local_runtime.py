@@ -1,4 +1,6 @@
+import calendar
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 import logging
 from time import perf_counter
 from typing import Any
@@ -44,6 +46,46 @@ logger = logging.getLogger(__name__)
 
 def should_monitor(tool_name: str) -> bool:
     return tool_name in {"create_budget", "update_goal", "create_reminder"}
+
+
+def _next_salary_date(as_of: date, salary_day: int) -> date:
+    salary_date = as_of.replace(
+        day=min(salary_day, calendar.monthrange(as_of.year, as_of.month)[1])
+    )
+    if salary_date > as_of:
+        return salary_date
+    next_month = (as_of.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return next_month.replace(
+        day=min(salary_day, calendar.monthrange(next_month.year, next_month.month)[1])
+    )
+
+
+def _liquidity_context(
+    *, snapshot: BaseModel, recurring: BaseModel, as_of: date
+) -> dict[str, Any]:
+    next_income_date = _next_salary_date(as_of, snapshot.salary_day)
+    events_before_income = [
+        event for event in recurring.events if event.expected_date < next_income_date
+    ]
+    obligation_total = sum(
+        (event.expected_amount for event in events_before_income), Decimal(0)
+    )
+    available_balance = Decimal(snapshot.total_available_balance)
+    shortfall = max(obligation_total - available_balance, Decimal(0))
+    return {
+        "has_upcoming_obligation": bool(recurring.events),
+        "has_liquidity_shortfall": shortfall > 0,
+        "has_income_timing_gap": bool(events_before_income),
+        "available_balance": str(available_balance),
+        "obligations_before_income": str(obligation_total),
+        "liquidity_gap": str(shortfall),
+        "next_income_date": next_income_date.isoformat(),
+        "first_obligation_date": (
+            min(event.expected_date for event in recurring.events).isoformat()
+            if recurring.events
+            else None
+        ),
+    }
 
 
 class LocalAgentRuntime(AgentRuntime):
@@ -272,66 +314,93 @@ class LocalAgentRuntime(AgentRuntime):
             session, customer_id=customer_id, tool_name="detect_upcoming_recurring",
             arguments={"customer_id": customer_id, "as_of": as_of.isoformat(), "window_days": 14}
         )
+        try:
+            goal = self.trace_tool(
+                session, customer_id=customer_id, tool_name="simulate_goal_scenarios",
+                arguments={"customer_id": customer_id, "as_of": as_of.isoformat()}
+            )
+        except ValueError:
+            goal = None
+
+        liquidity = _liquidity_context(
+            snapshot=snapshot, recurring=recurring, as_of=as_of
+        )
+        risk_flags = {
+            "cashflow_risk": forecast.risk_level != "LOW",
+            "spending_anomaly": bool(anomaly.anomalies),
+            "goal_drift": bool(goal and goal.gap_analysis.is_drifting),
+            "upcoming_recurring": bool(recurring.events),
+            "has_upcoming_obligation": liquidity["has_upcoming_obligation"],
+            "has_liquidity_shortfall": liquidity["has_liquidity_shortfall"],
+            "has_income_timing_gap": liquidity["has_income_timing_gap"],
+        }
+        all_analysis = {
+            "cashflow": _json(forecast),
+            "spending": _json(anomaly),
+            "goal": _json(goal) if goal else None,
+            "recurring": _json(recurring),
+            "liquidity": liquidity,
+        }
 
         primary_type: SignalType | None = None
         analysis: dict[str, Any]
-        if forecast.risk_level == "HIGH":
+        if risk_flags["cashflow_risk"]:
             primary_type = SignalType.CASHFLOW_RISK
             analysis = _json(forecast)
-            severity = "HIGH"
-        elif anomaly.anomalies:
+        elif risk_flags["spending_anomaly"]:
             primary_type = SignalType.SPENDING_ANOMALY
             analysis = _json(anomaly)
-            severity = "MEDIUM"
+        elif risk_flags["goal_drift"]:
+            primary_type = SignalType.GOAL_DRIFT
+            analysis = _json(goal)
+        elif risk_flags["upcoming_recurring"]:
+            primary_type = SignalType.UPCOMING_RECURRING
+            analysis = _json(recurring)
         else:
-            try:
-                goal = self.trace_tool(
-                    session, customer_id=customer_id, tool_name="simulate_goal_scenarios",
-                    arguments={"customer_id": customer_id, "as_of": as_of.isoformat()}
-                )
-            except ValueError:
-                goal = None
-            if goal and goal.gap_analysis.is_drifting:
-                primary_type = SignalType.GOAL_DRIFT
-                analysis = _json(goal)
-                severity = "MEDIUM"
-            elif recurring.events:
-                primary_type = SignalType.UPCOMING_RECURRING
-                analysis = _json(recurring)
-                severity = "MEDIUM"
-            else:
-                state.financial_analysis = _json(forecast)
-                state.transition(AgentLifecycle.RECOMMENDATION_READY)
-                return state
+            state.financial_analysis = {
+                **_json(forecast),
+                "risk_flags": risk_flags,
+                "all_analysis": all_analysis,
+            }
+            state.transition(AgentLifecycle.RECOMMENDATION_READY)
+            return state
 
-        signal = self._upsert_signal(
-            session, customer_id=customer_id, signal_type=primary_type,
-            severity=severity, data=analysis
-        )
-        state.signals = [{
-            "signal_id": signal.signal_id, "signal_type": signal.signal_type.value,
-            "severity": signal.severity, "status": signal.status.value,
-            "signal_data": signal.signal_data,
-        }]
         state.trigger_type = primary_type.value
         state.transition(AgentLifecycle.SIGNAL_DETECTED)
-        state.financial_analysis = analysis
+        state.financial_analysis = {
+            **analysis,
+            "risk_flags": risk_flags,
+            "all_analysis": all_analysis,
+        }
         state.transition(AgentLifecycle.ANALYSIS_READY)
         candidate = self.candidate_generator.generate(
             session, customer_id=customer_id, as_of=as_of,
             primary_type=primary_type, analysis=analysis
         )
+        # Candidate generation controls safe action choices, not risk severity.
+        candidate.severity = "UNASSESSED"
         recommendation_id = f"R-{uuid4().hex[:16].upper()}"
         state.recommendation_id = recommendation_id
         llm_started = perf_counter()
         try:
             decision = self.llm.generate_structured(
                 system_prompt=FINANCIAL_RADAR_SYSTEM_PROMPT,
-                user_prompt=message,
+                user_prompt=(
+                    f"{message}\n\nHãy trả thêm alert_summary dành cho màn hình cảnh báo: "
+                    "một câu tiếng Việt nhẹ nhàng, mang tính cảnh báo sớm, tối đa 100 "
+                    "ký tự. Chỉ nêu vấn đề chung và tuyệt đối không đưa số liệu, số tiền, "
+                    "phần trăm, ngày tháng, mức âm, nguyên nhân hay hành động đề xuất. "
+                    "Ưu tiên các từ 'có thể', 'dự kiến', 'cần lưu ý'. Ví dụ với rủi ro "
+                    "dòng tiền: 'Số dư dự kiến có thể không đủ để duy trì mức an toàn.' "
+                    "Giữ summary làm phần giải thích chi tiết có số liệu. Đồng thời "
+                    "hãy tự đánh giá risk_level tổng hợp là LOW, MEDIUM hoặc HIGH từ "
+                    "toàn bộ financial_analysis và risk_flags được cung cấp."
+                ),
                 response_model=LLMRecommendationDecision,
                 context={
                     "candidate_plan": candidate.model_dump(mode="json"),
-                    "financial_analysis": analysis,
+                    "risk_flags": risk_flags,
+                    "financial_analysis": all_analysis,
                 },
             )
         except Exception as error:
@@ -355,6 +424,18 @@ class LocalAgentRuntime(AgentRuntime):
             decision.recommended_option_id,
         )
         state.recommendation = assemble_recommendation(candidate, decision)
+        signal = self._upsert_signal(
+            session,
+            customer_id=customer_id,
+            signal_type=primary_type,
+            severity=decision.risk_level,
+            data={"risk_flags": risk_flags, "financial_analysis": all_analysis},
+        )
+        state.signals = [{
+            "signal_id": signal.signal_id, "signal_type": signal.signal_type.value,
+            "severity": signal.severity, "status": signal.status.value,
+            "signal_data": signal.signal_data,
+        }]
         now = datetime.utcnow()
         session.add(
             AgentRecommendation(
@@ -449,6 +530,7 @@ class LocalAgentRuntime(AgentRuntime):
             {
                 "problem": "Direct customer action request",
                 "severity": self.registry.get(tool_name).risk_level.value,
+                "alert_summary": "Yêu cầu của bạn đã được kiểm tra và sẵn sàng xác nhận.",
                 "summary": "Action validated and sent through policy enforcement.",
                 "evidence": [
                     {

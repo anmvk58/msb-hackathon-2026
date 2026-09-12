@@ -42,7 +42,7 @@ def test_openapi_documents_workflow_examples_and_demo_scope() -> None:
         "Audit",
     }
     run_operation = schema["paths"]["/api/agent/run"]["post"]
-    assert run_operation["summary"] == "Chạy Agent Financial Radar"
+    assert run_operation["summary"] == "Chạy Agent Financial Sensing"
     request_schema = schema["components"]["schemas"]["AgentRunRequest"]
     assert request_schema["examples"][0]["customer_id"] == "C001"
     budget_operation = schema["paths"]["/api/actions/create-budget"]["post"]
@@ -97,6 +97,8 @@ def test_agent_confirmation_e2e(session: Session) -> None:
 
     assert recommendation.status_code == 200
     assert recommendation.json()["state"] == "RECOMMENDATION_READY"
+    assert recommendation.json()["alert_summary"]
+    assert len(recommendation.json()["alert_summary"]) <= 100
     assert waiting.json()["state"] == "WAITING_CONFIRMATION"
     assert waiting.json()["confirmation"]["required"] is True
     assert before.json()["action_status"] == "PREPARED"

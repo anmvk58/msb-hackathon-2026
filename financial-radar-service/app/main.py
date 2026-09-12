@@ -25,7 +25,9 @@ from app.llm import (
     LLMStructuredOutputError,
     LLMTimeoutError,
 )
-from app.models import AgentActionLog, RadarSignal
+from app.models import AgentActionLog, RadarSignal, ScanTrigger
+from app.scan_schemas import RadarScanRead
+from app.scan_service import get_latest_completed_scan, run_and_record_scan
 from app.schemas import AgentActionLogRead, RadarSignalRead
 from app.tools import build_tool_registry
 from app.tools.contracts import ToolExecutionError
@@ -47,7 +49,7 @@ from app.tools.schemas import (
 
 
 API_DESCRIPTION = """
-MSB Financial Radar là API demo cho quy trình **phát hiện → khuyến nghị → lựa chọn
+MSB Financial Sensing là API demo cho quy trình **phát hiện → khuyến nghị → lựa chọn
 → xác nhận → thực thi → audit**.
 
 ### Cách thử nhanh
@@ -66,7 +68,7 @@ Banking vẫn là hệ thống giả lập, **không phải Core Banking MSB th�
 
 OPENAPI_TAGS = [
     {"name": "System", "description": "Khám phá API và kiểm tra tình trạng runtime."},
-    {"name": "Agent workflow", "description": "Luồng nghiệp vụ chính của Financial Radar."},
+    {"name": "Agent workflow", "description": "Luồng nghiệp vụ chính của Financial Sensing."},
     {"name": "Customer insights", "description": "Dữ liệu tổng hợp và tín hiệu theo khách hàng."},
     {"name": "Financial tools", "description": "Các phép tính deterministic, không thay đổi dữ liệu."},
     {"name": "Demo actions", "description": "Chuẩn bị hành động áp dụng qua Mock Core Banking; không tác động hệ thống MSB thật."},
@@ -81,7 +83,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="MSB Financial Radar",
+    title="MSB Financial Sensing",
     version="0.1.0",
     description=API_DESCRIPTION,
     openapi_tags=OPENAPI_TAGS,
@@ -113,7 +115,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 )
 def api_home() -> dict[str, str]:
     return {
-        "name": "MSB Financial Radar",
+        "name": "MSB Financial Sensing",
         "status": "running",
         "documentation": "/docs",
         "health": "/health",
@@ -167,18 +169,19 @@ def customer_snapshot(customer_id: str, session: DbSession) -> dict:
     "/api/customers/{customer_id}/radar",
     response_model=AgentResponse,
     tags=["Agent workflow"],
-    summary="Chủ động quét Financial Radar",
+    summary="Chủ động quét Financial Sensing",
     description="Chạy toàn bộ phân tích và sinh khuyến nghị cho khách hàng mà không cần message đầu vào.",
 )
 def customer_radar(customer_id: str, session: DbSession, as_of: date | None = None) -> AgentResponse:
     try:
-        state = runtime.run(
+        return run_and_record_scan(
             session,
+            runtime,
             customer_id=customer_id,
-            message="Chủ động quét Financial Radar",
+            message="Chủ động quét Financial Sensing",
+            trigger_type=ScanTrigger.MANUAL,
             as_of=as_of or business_today(),
         )
-        return response_from_state(state)
     except LLMAuthenticationError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except LLMTimeoutError as error:
@@ -187,6 +190,20 @@ def customer_radar(customer_id: str, session: DbSession, as_of: date | None = No
         raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get(
+    "/api/customers/{customer_id}/radar/latest",
+    response_model=RadarScanRead,
+    tags=["Customer insights"],
+    summary="Lấy kết quả Financial Sensing gần nhất",
+    description="Trả kết quả quét hoàn tất gần nhất từ database, không gọi LLM.",
+)
+def latest_customer_radar(customer_id: str, session: DbSession) -> RadarScanRead:
+    latest = get_latest_completed_scan(session, customer_id)
+    if latest is None:
+        raise HTTPException(status_code=404, detail="Customer has no completed radar scan")
+    return latest
 
 
 @app.post("/api/tools/forecast-cashflow", response_model=CashflowOutput, tags=["Financial tools"], summary="Dự báo dòng tiền", description="Dự báo số dư đến một ngày tương lai dựa trên dữ liệu giao dịch và khoản định kỳ.")
@@ -239,16 +256,17 @@ def api_update_goal(payload: UpdateGoalInput, session: DbSession) -> AgentRespon
     return _prepare_direct_action(session, "update_goal", payload)
 
 
-@app.post("/api/agent/run", response_model=AgentResponse, tags=["Agent workflow"], summary="Chạy Agent Financial Radar", description="Điểm vào chính: phân tích khách hàng, gọi LLM để diễn giải và trả về các lựa chọn khuyến nghị. Dùng `C001` cho demo.")
+@app.post("/api/agent/run", response_model=AgentResponse, tags=["Agent workflow"], summary="Chạy Agent Financial Sensing", description="Điểm vào chính: phân tích khách hàng, gọi LLM để diễn giải và trả về các lựa chọn khuyến nghị. Dùng `C001` cho demo.")
 def agent_run(payload: AgentRunRequest, session: DbSession) -> AgentResponse:
     try:
-        state = runtime.run(
+        return run_and_record_scan(
             session,
+            runtime,
             customer_id=payload.customer_id,
             message=payload.message,
+            trigger_type=ScanTrigger.MANUAL,
             as_of=payload.as_of or business_today(),
         )
-        return response_from_state(state)
     except LLMAuthenticationError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except LLMTimeoutError as error:
@@ -300,7 +318,7 @@ def get_action(action_id: str, session: DbSession) -> AgentActionLog:
     return action
 
 
-@app.get("/api/customers/{customer_id}/signals", response_model=list[RadarSignalRead], tags=["Customer insights"], summary="Liệt kê tín hiệu Financial Radar", description="Trả về các tín hiệu đã phát hiện của khách hàng, mới nhất trước.")
+@app.get("/api/customers/{customer_id}/signals", response_model=list[RadarSignalRead], tags=["Customer insights"], summary="Liệt kê tín hiệu Financial Sensing", description="Trả về các tín hiệu đã phát hiện của khách hàng, mới nhất trước.")
 def get_signals(customer_id: str, session: DbSession) -> list[RadarSignal]:
     registry.gateway.get_financial_context(customer_id)
     return list(

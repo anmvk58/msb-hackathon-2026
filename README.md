@@ -1,4 +1,4 @@
-# MSB Financial Radar
+# MSB Financial Sensing
 
 **Cố vấn Tài chính Đón đầu** is a proactive financial agent built around
 `PREDICT → ADVISE → ACT`. It detects signals, forecasts risks, produces grounded
@@ -56,14 +56,14 @@ financial-radar-service/
   app/                    Agent API, runtime, engine, tools and banking gateway
   tests/                  Agent, engine, policy and integration tests
   main.py                 Port-8080 AgentBase-compatible entrypoint
-  Dockerfile              Financial Radar image
+  Dockerfile              Financial Sensing image
 mock-core-banking-service/
   corebanking/            Customer data and Core Banking business API
   tests/                  Core Banking API tests
   main.py                 Port-8090 entrypoint
   Dockerfile              Mock Core Banking image
 frontend-mobile/
-  src/                    Customer-facing Mobile Banking and Financial Radar UI
+  src/                    Customer-facing Mobile Banking and Financial Sensing UI
   Dockerfile              Nginx frontend image
 docker-compose.yml        MySQL + both backend services + frontend
 ```
@@ -72,7 +72,7 @@ docker-compose.yml        MySQL + both backend services + frontend
 
 Mock Core Banking owns customers, accounts, transactions, recurring events,
 budgets, saving goals, reminders, and idempotency records in MySQL 8.4.
-Financial Radar never queries those tables. It consumes typed context and applies
+Financial Sensing never queries those tables. It consumes typed context and applies
 confirmed actions through the Core Banking REST API.
 
 The Agent database owns only `radar_signals`, `agent_recommendations`, and
@@ -232,9 +232,9 @@ docker compose up --build -d mysql corebanking financial-radar-agent
 ```
 
 - Mobile Banking demo: `http://localhost:3000`
-- Financial Radar Agent: `http://localhost:8080/docs`
+- Financial Sensing Agent: `http://localhost:8080/docs`
 - Mock Core Banking: `http://localhost:8090/docs`
 
-Financial Radar reads all customer context and applies confirmed actions through
+Financial Sensing reads all customer context and applies confirmed actions through
 the Core Banking HTTP API. Its local database contains only signals,
 recommendations, and action audit logs.

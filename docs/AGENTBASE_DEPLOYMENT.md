@@ -1,6 +1,6 @@
 # AgentBase deployment readiness
 
-MSB Financial Radar targets a **Custom Agent** runtime. It keeps its deterministic
+MSB Financial Sensing targets a **Custom Agent** runtime. It keeps its deterministic
 Financial Engine and ToolRegistry inside the container; a Resource Gateway is not
 needed for this MVP. The tools can later move behind an MCP Resource Gateway when
 multiple agents or network-isolated capabilities need to share them.

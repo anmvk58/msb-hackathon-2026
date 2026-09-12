@@ -35,6 +35,7 @@ class ConfirmationView(BaseModel):
 
 class AgentResponse(BaseModel):
     message: str
+    alert_summary: str | None = None
     state: AgentLifecycle
     customer_id: str
     signals: list[dict[str, Any]] = Field(default_factory=list)
@@ -62,9 +63,10 @@ def response_from_state(state: "RadarState") -> AgentResponse:
     elif recommendation:
         message = recommendation.summary
     else:
-        message = state.error or "Financial Radar completed."
+        message = state.error or "Tài chính của bạn đang ổn định, hiện chưa có điều gì cần lo lắng."
     return AgentResponse(
         message=message,
+        alert_summary=recommendation.alert_summary if recommendation else None,
         state=state.state,
         customer_id=state.customer_id,
         signals=state.signals,

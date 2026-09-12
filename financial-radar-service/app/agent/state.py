@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -75,7 +75,15 @@ class RecommendationOption(BaseModel):
 class RecommendationResult(BaseModel):
     problem: str
     severity: str
-    summary: str
+    # Default keeps recommendations persisted before this field was introduced readable.
+    alert_summary: str = Field(default="", max_length=100, pattern=r"^[^0-9]*$")
+    summary: str = Field(
+        description=(
+            "Diễn giải tiếng Việt phổ thông ở dạng Markdown: một đoạn mở đầu ngắn, "
+            "hai đến bốn bullet dùng dấu -, nhấn mạnh vừa phải bằng **bold**, và "
+            "một câu kết nhẹ nhàng. Không dùng thuật ngữ chuyên môn ngân hàng."
+        )
+    )
     evidence: list[EvidenceItem]
     options: list[RecommendationOption] = Field(min_length=1, max_length=3)
     recommended_option_id: str
@@ -95,7 +103,29 @@ class CandidateActionPlan(BaseModel):
 class LLMRecommendationDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    summary: str
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"] = Field(
+        description=(
+            "Mức độ rủi ro tổng hợp do LLM đánh giá từ toàn bộ dữ liệu và các cờ "
+            "rủi ro đã được Financial Engine cung cấp."
+        )
+    )
+    alert_summary: str = Field(
+        max_length=100,
+        pattern=r"^[^0-9]*$",
+        description=(
+            "Một câu tiếng Việt nhẹ nhàng, mang tính cảnh báo sớm, tối đa 100 ký tự. "
+            "Chỉ nêu vấn đề chung; không chứa số liệu, số tiền, phần trăm, ngày tháng, "
+            "mức âm, thuật ngữ kỹ thuật, nguyên nhân, lập luận hoặc hành động đề xuất. "
+            "Ưu tiên cách diễn đạt có thể, dự kiến hoặc cần lưu ý."
+        ),
+    )
+    summary: str = Field(
+        description=(
+            "Diễn giải tiếng Việt phổ thông ở dạng Markdown: một đoạn mở đầu ngắn, "
+            "hai đến bốn bullet dùng dấu -, nhấn mạnh vừa phải bằng **bold**, và "
+            "một câu kết nhẹ nhàng. Không dùng thuật ngữ chuyên môn ngân hàng."
+        )
+    )
     recommended_option_id: str
     reasoning_summary: str
 
@@ -111,7 +141,8 @@ def assemble_recommendation(
         )
     return RecommendationResult(
         problem=plan.problem,
-        severity=plan.severity,
+        severity=decision.risk_level,
+        alert_summary=decision.alert_summary,
         summary=decision.summary,
         evidence=plan.evidence,
         options=plan.candidate_options,

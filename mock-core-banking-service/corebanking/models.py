@@ -53,6 +53,60 @@ class Account(CoreBankingBase):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class OverdraftFacility(CoreBankingBase):
+    __tablename__ = "overdraft_facilities"
+    facility_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.account_id"), index=True)
+    credit_limit: Mapped[Decimal] = mapped_column(money)
+    used_amount: Mapped[Decimal] = mapped_column(money, default=0)
+    annual_interest_rate: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    expires_at: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
+
+
+class TermDeposit(CoreBankingBase):
+    __tablename__ = "term_deposits"
+    deposit_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
+    product_name: Mapped[str] = mapped_column(String(120))
+    current_balance: Mapped[Decimal] = mapped_column(money)
+    available_withdrawal_amount: Mapped[Decimal] = mapped_column(money)
+    interest_rate: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    early_withdrawal_rate: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    opened_at: Mapped[date] = mapped_column(Date)
+    maturity_date: Mapped[date] = mapped_column(Date)
+    partial_withdrawal_allowed: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
+
+
+class CreditCard(CoreBankingBase):
+    __tablename__ = "credit_cards"
+    card_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
+    masked_number: Mapped[str] = mapped_column(String(24))
+    product_name: Mapped[str] = mapped_column(String(120))
+    credit_limit: Mapped[Decimal] = mapped_column(money)
+    outstanding_amount: Mapped[Decimal] = mapped_column(money, default=0)
+    payment_due_day: Mapped[int]
+    status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
+
+
+class PreapprovedLoanOffer(CoreBankingBase):
+    __tablename__ = "preapproved_loan_offers"
+    offer_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
+    product_code: Mapped[str] = mapped_column(String(50))
+    display_name: Mapped[str] = mapped_column(String(120))
+    approved_limit: Mapped[Decimal] = mapped_column(money)
+    minimum_amount: Mapped[Decimal] = mapped_column(money)
+    annual_interest_rate: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    term_months: Mapped[int]
+    valid_until: Mapped[date] = mapped_column(Date)
+    eligibility_status: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
+
+
 class Transaction(CoreBankingBase):
     __tablename__ = "transactions"
 

@@ -16,6 +16,8 @@ class BankingGateway(Protocol):
 
     def update_goal(self, customer_id: str, goal_id: str, payload: dict[str, Any], *, idempotency_key: str | None) -> dict[str, Any]: ...
 
+    def draw_overdraft(self, customer_id: str, facility_id: str, amount: str, *, idempotency_key: str | None) -> dict[str, Any]: ...
+
 
 class HttpBankingGateway:
     def __init__(
@@ -65,6 +67,9 @@ class HttpBankingGateway:
 
     def update_goal(self, customer_id: str, goal_id: str, payload: dict[str, Any], *, idempotency_key: str | None) -> dict[str, Any]:
         return self._request("PATCH", f"/api/customers/{customer_id}/goals/{goal_id}", payload=payload, idempotency_key=idempotency_key)
+
+    def draw_overdraft(self, customer_id: str, facility_id: str, amount: str, *, idempotency_key: str | None) -> dict[str, Any]:
+        return self._request("POST", f"/api/customers/{customer_id}/overdraft-facilities/{facility_id}/draw", payload={"amount": amount}, idempotency_key=idempotency_key)
 
 
 def build_banking_gateway(
