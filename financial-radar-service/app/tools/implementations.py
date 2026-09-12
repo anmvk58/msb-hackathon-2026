@@ -142,13 +142,13 @@ class UpdateGoalTool(GatewayTool):
 class PrepareFundingOptionTool(GatewayTool):
     name = "prepare_funding_option"
     description = "Prepare a verified funding option for explicit customer confirmation."
-    risk_level = RiskLevel.HIGH
+    risk_level = RiskLevel.MEDIUM
     confirmation_policy = ConfirmationPolicy.EXPLICIT
     input_model = PrepareFundingInput
     output_model = PrepareFundingOutput
 
     def execute(self, session: Session, arguments: PrepareFundingInput, *, idempotency_key: str | None = None) -> PrepareFundingOutput:
-        del session, idempotency_key
+        del session
         context = self.gateway.get_financial_context(arguments.customer_id)
         valid = {
             "OVERDRAFT": {x.facility_id: x.credit_limit - x.used_amount for x in context.overdraft_facilities if x.status == "ACTIVE"},

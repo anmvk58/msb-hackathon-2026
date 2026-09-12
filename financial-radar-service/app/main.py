@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -18,7 +18,7 @@ from app.agent.schemas import (
     response_from_state,
 )
 from app.config import get_settings
-from app.database import create_schema, get_db
+from app.database import SessionLocal, create_schema, get_db
 from app.llm import (
     LLMAuthenticationError,
     LLMRequestError,
@@ -27,7 +27,13 @@ from app.llm import (
 )
 from app.models import AgentActionLog, RadarSignal, ScanTrigger
 from app.scan_schemas import RadarScanRead
-from app.scan_service import get_latest_completed_scan, run_and_record_scan
+from app.scan_service import (
+    create_pending_scan,
+    execute_pending_scan,
+    get_latest_completed_scan,
+    get_scan,
+    run_and_record_scan,
+)
 from app.schemas import AgentActionLogRead, RadarSignalRead
 from app.tools import build_tool_registry
 from app.tools.contracts import ToolExecutionError
@@ -105,6 +111,15 @@ BUSINESS_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 def business_today() -> date:
     return datetime.now(BUSINESS_TIMEZONE).date()
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+def _run_scan_background(scan_id: str) -> None:
+    with SessionLocal() as session:
+        try:
+            execute_pending_scan(session, runtime, scan_id)
+        except Exception:
+            # execute_pending_scan persists FAILED and the error for polling clients.
+            return
 
 
 @app.get(
@@ -275,6 +290,46 @@ def agent_run(payload: AgentRunRequest, session: DbSession) -> AgentResponse:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post(
+    "/api/agent/run-async",
+    response_model=RadarScanRead,
+    status_code=202,
+    tags=["Agent workflow"],
+    summary="Khởi tạo quét Financial Sensing bất đồng bộ",
+    description="Trả scan_id ngay; dùng GET /api/scans/{scan_id} để theo dõi đến khi hoàn tất.",
+)
+def agent_run_async(
+    payload: AgentRunRequest,
+    background_tasks: BackgroundTasks,
+    session: DbSession,
+) -> RadarScanRead:
+    scan = create_pending_scan(
+        session,
+        customer_id=payload.customer_id,
+        message=payload.message,
+        trigger_type=ScanTrigger.MANUAL,
+        as_of=payload.as_of or business_today(),
+    )
+    background_tasks.add_task(_run_scan_background, scan.scan_id)
+    result = get_scan(session, scan.scan_id)
+    if result is None:
+        raise HTTPException(status_code=500, detail="Could not create scan")
+    return result
+
+
+@app.get(
+    "/api/scans/{scan_id}",
+    response_model=RadarScanRead,
+    tags=["Agent workflow"],
+    summary="Theo dõi trạng thái một lần quét",
+)
+def scan_status(scan_id: str, session: DbSession) -> RadarScanRead:
+    result = get_scan(session, scan_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Unknown scan_id")
+    return result
 
 
 @app.post("/api/agent/select", response_model=AgentResponse, tags=["Agent workflow"], summary="Chọn một phương án khuyến nghị", description="Dùng `recommendation_id` và `option_id` từ bước run. Agent tạo action draft và áp dụng policy xác nhận.")

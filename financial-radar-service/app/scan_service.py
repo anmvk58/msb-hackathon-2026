@@ -19,6 +19,27 @@ def run_and_record_scan(
     message: str,
     as_of: date,
 ) -> AgentResponse:
+    scan = create_pending_scan(
+        session,
+        customer_id=customer_id,
+        trigger_type=trigger_type,
+        message=message,
+        as_of=as_of,
+    )
+    response = execute_pending_scan(session, runtime, scan.scan_id)
+    if response is None:
+        raise RuntimeError("Scan completed without a result")
+    return response
+
+
+def create_pending_scan(
+    session: Session,
+    *,
+    customer_id: str,
+    trigger_type: ScanTrigger,
+    message: str,
+    as_of: date,
+) -> RadarScanRun:
     scan = RadarScanRun(
         scan_id=f"SCAN-{uuid4().hex[:20].upper()}",
         customer_id=customer_id,
@@ -28,12 +49,27 @@ def run_and_record_scan(
     )
     session.add(scan)
     session.commit()
+    session.refresh(scan)
+    return scan
+
+
+def execute_pending_scan(
+    session: Session,
+    runtime: AgentRuntime,
+    scan_id: str,
+) -> AgentResponse | None:
+    scan = session.get(RadarScanRun, scan_id)
+    if scan is None:
+        raise ValueError("Unknown scan_id")
+    if scan.status != ScanStatus.RUNNING:
+        return AgentResponse.model_validate(scan.result_data) if scan.result_data else None
     try:
+        as_of = date.fromisoformat(scan.input_snapshot["as_of"])
         response = response_from_state(
             runtime.run(
                 session,
-                customer_id=customer_id,
-                message=message,
+                customer_id=scan.customer_id,
+                message=scan.input_snapshot["message"],
                 as_of=as_of,
             )
         )
@@ -49,13 +85,18 @@ def run_and_record_scan(
         return response
     except Exception as error:
         session.rollback()
-        failed_scan = session.get(RadarScanRun, scan.scan_id)
+        failed_scan = session.get(RadarScanRun, scan_id)
         if failed_scan is not None:
             failed_scan.status = ScanStatus.FAILED
             failed_scan.error_message = str(error)[:1000]
             failed_scan.completed_at = datetime.utcnow()
             session.commit()
         raise
+
+
+def get_scan(session: Session, scan_id: str) -> RadarScanRead | None:
+    scan = session.get(RadarScanRun, scan_id)
+    return _scan_read(scan) if scan else None
 
 
 def get_latest_completed_scan(session: Session, customer_id: str) -> RadarScanRead | None:
@@ -68,8 +109,10 @@ def get_latest_completed_scan(session: Session, customer_id: str) -> RadarScanRe
         .order_by(RadarScanRun.completed_at.desc(), RadarScanRun.started_at.desc())
         .limit(1)
     )
-    if scan is None:
-        return None
+    return _scan_read(scan) if scan else None
+
+
+def _scan_read(scan: RadarScanRun) -> RadarScanRead:
     result = AgentResponse.model_validate(scan.result_data) if scan.result_data else None
     reassuring_message = "Tài chính của bạn đang ổn định, hiện chưa có điều gì cần lo lắng."
     if result and scan.risk_level == "LOW" and result.message == "Financial Sensing completed.":
@@ -86,5 +129,6 @@ def get_latest_completed_scan(session: Session, customer_id: str) -> RadarScanRe
         alert_summary=alert_summary,
         started_at=scan.started_at,
         completed_at=scan.completed_at,
+        error_message=scan.error_message,
         result=result,
     )

@@ -49,6 +49,15 @@ def test_create_budget_requires_confirmation() -> None:
     assert decision.confirmation_policy == ConfirmationPolicy.REQUIRED
 
 
+def test_funding_option_is_allowed_only_after_explicit_confirmation() -> None:
+    registry = build_tool_registry()
+    decision = PolicyEngine(registry).evaluate("prepare_funding_option")
+
+    assert decision.allowed is True
+    assert decision.confirmation_required is True
+    assert decision.confirmation_policy == ConfirmationPolicy.EXPLICIT
+
+
 def test_create_budget_server_side_validation() -> None:
     with pytest.raises(ValidationError):
         CreateBudgetInput(

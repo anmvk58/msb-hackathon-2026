@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_api_key: str | None = Field(default=None, repr=False)
     llm_model: str | None = None
-    llm_timeout_seconds: int = 60
+    llm_timeout_seconds: int = 90
     llm_structured_retries: int = 2
     agent_recommendation_ttl_seconds: int = 900
     scheduler_interval_seconds: int = 180

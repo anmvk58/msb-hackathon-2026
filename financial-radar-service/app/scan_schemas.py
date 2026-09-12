@@ -17,5 +17,5 @@ class RadarScanRead(BaseModel):
     alert_summary: str | None
     started_at: datetime
     completed_at: datetime | None
+    error_message: str | None = None
     result: AgentResponse | None = None
-
