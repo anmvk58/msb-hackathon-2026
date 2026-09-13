@@ -178,7 +178,15 @@ LLM_API_KEY=
 LLM_MODEL=
 LLM_TIMEOUT_SECONDS=90
 AGENT_RECOMMENDATION_TTL_SECONDS=900
+SCHEDULER_INTERVAL_SECONDS=180
 ```
+
+`SCHEDULER_INTERVAL_SECONDS` controls how often the automatic Financial Sensing
+scan runs. The value is expressed in seconds; for example, `60` is one minute,
+`180` is three minutes, and `900` is fifteen minutes. Restart the
+`financial-radar-scheduler` container after changing it. At the start of every
+cycle, the scheduler loads the current customer list from Mock Core Banking and
+scans every returned customer; no customer ID list needs to be configured.
 
 Runtime placement and LLM provider are configured independently. With
 `AGENT_RUNTIME=local`, `LLM_PROVIDER=mock` uses `MockLLMClient`, while

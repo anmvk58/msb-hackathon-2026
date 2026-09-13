@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -5,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -113,6 +114,21 @@ def business_today() -> date:
 DbSession = Annotated[Session, Depends(get_db)]
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class FinancialChatRequest(BaseModel):
+    customer_id: str = Field(min_length=1, max_length=32)
+    message: str = Field(min_length=1, max_length=1000)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=10)
+
+
+class FinancialChatResponse(BaseModel):
+    reply: str
+
+
 def _run_scan_background(scan_id: str) -> None:
     with SessionLocal() as session:
         try:
@@ -154,6 +170,61 @@ def health() -> dict[str, str]:
             else "mock"
         ),
     }
+
+
+@app.post("/api/chat", response_model=FinancialChatResponse, tags=["Agent workflow"], summary="Trò chuyện với trợ lý Financial Sensing")
+def financial_chat(payload: FinancialChatRequest, session: DbSession) -> FinancialChatResponse:
+    try:
+        context = registry.gateway.get_financial_context(payload.customer_id)
+        latest = get_latest_completed_scan(session, payload.customer_id)
+        compact_context = {
+            "customer": context.customer.model_dump(mode="json"),
+            "accounts": [item.model_dump(mode="json") for item in context.accounts],
+            "recent_transactions": [item.model_dump(mode="json") for item in context.recent_transactions[:20]],
+            "recurring_events": [item.model_dump(mode="json") for item in context.recurring_events],
+            "active_budgets": [item.model_dump(mode="json") for item in context.active_budgets],
+            "active_goals": [item.model_dump(mode="json") for item in context.active_goals],
+            "overdraft_facilities": [item.model_dump(mode="json") for item in context.overdraft_facilities],
+            "term_deposits": [item.model_dump(mode="json") for item in context.term_deposits],
+            "credit_cards": [item.model_dump(mode="json") for item in context.credit_cards],
+            "preapproved_loan_offers": [item.model_dump(mode="json") for item in context.preapproved_loan_offers],
+            "latest_financial_sensing": (
+                latest.result.model_dump(mode="json")
+                if latest and latest.result
+                else None
+            ),
+        }
+        conversation = "\n".join(
+            f"{'Khách hàng' if item.role == 'user' else 'Trợ lý'}: {item.content}"
+            for item in payload.history[-10:]
+        )
+        user_prompt = (
+            "Dữ liệu tài chính hiện tại:\n"
+            + json.dumps(compact_context, ensure_ascii=False, default=str)
+            + (f"\n\nHội thoại gần đây:\n{conversation}" if conversation else "")
+            + f"\n\nCâu hỏi mới của khách hàng: {payload.message}"
+        )
+        reply = runtime.llm.generate(
+            system_prompt=(
+                "Bạn là trợ lý Financial Sensing trong ứng dụng ngân hàng. Trả lời bằng tiếng Việt, "
+                "thân thiện, ngắn gọn và dễ hiểu với người không có nghiệp vụ ngân hàng. Chỉ dùng dữ "
+                "liệu được cung cấp; nếu thiếu dữ liệu thì nói rõ. Có thể giải thích sức khỏe tài chính, "
+                "chi tiêu, dòng tiền, tiết kiệm và kiến thức tài chính liên quan. Không khẳng định chắc "
+                "chắn về tương lai, không hứa lợi nhuận, không yêu cầu mật khẩu hoặc OTP và không tuyên "
+                "bố đã thực hiện giao dịch. Với quyết định vay hoặc đầu tư, nêu rủi ro và khuyên khách "
+                "hàng cân nhắc điều kiện sản phẩm. Không dùng Markdown phức tạp; tối đa khoảng 180 từ."
+            ),
+            user_prompt=user_prompt,
+        ).strip()
+        return FinancialChatResponse(reply=reply)
+    except LLMAuthenticationError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except LLMTimeoutError as error:
+        raise HTTPException(status_code=504, detail=str(error)) from error
+    except (LLMStructuredOutputError, LLMRequestError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except (ValueError, ToolExecutionError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 def _execute_tool(session: Session, tool_name: str, payload: BaseModel) -> dict:

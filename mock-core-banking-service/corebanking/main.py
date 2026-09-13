@@ -122,6 +122,12 @@ def demo_login(payload: DemoLoginRequest, session: DbSession) -> DemoLoginRespon
     )
 
 
+@app.get("/api/customers", response_model=list[CustomerRead], tags=["Customer context"], summary="Lấy danh sách khách hàng")
+def list_customers(session: DbSession) -> list[CustomerRead]:
+    customers = session.scalars(select(Customer).order_by(Customer.customer_id)).all()
+    return [CustomerRead.model_validate(customer) for customer in customers]
+
+
 @app.get("/api/customers/{customer_id}/financial-context", response_model=FinancialContext, tags=["Customer context"], summary="Lấy context tài chính tổng hợp")
 def financial_context(
     customer_id: str,

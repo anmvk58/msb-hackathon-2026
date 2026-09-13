@@ -30,6 +30,31 @@ def test_home_guides_users_to_documentation(session: Session) -> None:
     assert "Mock Core Banking" in response.json()["scope"]
 
 
+def test_financial_chat_uses_logged_in_customer_context(session: Session) -> None:
+    with client_for(session) as client:
+        scan = client.post(
+            "/api/agent/run",
+            json={
+                "customer_id": "C001",
+                "message": "Kiểm tra tài chính",
+                "as_of": "2026-09-01",
+            },
+        )
+        response = client.post(
+            "/api/chat",
+            json={
+                "customer_id": "C001",
+                "message": "Tài chính của tôi hiện thế nào?",
+                "history": [],
+            },
+        )
+    app.dependency_overrides.clear()
+
+    assert scan.status_code == 200
+    assert response.status_code == 200
+    assert response.json()["reply"]
+
+
 def test_openapi_documents_workflow_examples_and_demo_scope() -> None:
     schema = app.openapi()
 

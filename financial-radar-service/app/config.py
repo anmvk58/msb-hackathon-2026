@@ -41,11 +41,6 @@ class Settings(BaseSettings):
     llm_structured_retries: int = 2
     agent_recommendation_ttl_seconds: int = 900
     scheduler_interval_seconds: int = 180
-    scheduler_customer_ids: str = "C001,C002,C003,C004"
-
-    @property
-    def scheduler_customers(self) -> list[str]:
-        return [item.strip() for item in self.scheduler_customer_ids.split(",") if item.strip()]
 
     greennode_client_id: str | None = None
     greennode_client_secret: str | None = Field(default=None, repr=False)
@@ -80,8 +75,6 @@ class Settings(BaseSettings):
             raise ValueError("AGENT_RECOMMENDATION_TTL_SECONDS must be greater than zero")
         if self.scheduler_interval_seconds <= 0:
             raise ValueError("SCHEDULER_INTERVAL_SECONDS must be greater than zero")
-        if not self.scheduler_customers:
-            raise ValueError("SCHEDULER_CUSTOMER_IDS must include at least one customer")
         if not self.core_banking_base_url.startswith(("http://", "https://")):
             raise ValueError("CORE_BANKING_BASE_URL must be an HTTP(S) URL")
         if self.core_banking_timeout_seconds <= 0:

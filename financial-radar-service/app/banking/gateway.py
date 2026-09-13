@@ -8,6 +8,8 @@ from app.errors import ToolExecutionError
 
 
 class BankingGateway(Protocol):
+    def list_customer_ids(self) -> list[str]: ...
+
     def get_financial_context(self, customer_id: str) -> FinancialContext: ...
 
     def create_budget(self, customer_id: str, payload: dict[str, Any], *, idempotency_key: str | None) -> dict[str, Any]: ...
@@ -40,7 +42,7 @@ class HttpBankingGateway:
             headers["Idempotency-Key"] = idempotency_key
         return headers
 
-    def _request(self, method: str, path: str, *, payload: dict[str, Any] | None = None, idempotency_key: str | None = None) -> dict[str, Any]:
+    def _request(self, method: str, path: str, *, payload: dict[str, Any] | None = None, idempotency_key: str | None = None) -> Any:
         try:
             response = self.client.request(method, f"{self.base_url}{path}", json=payload, headers=self._headers(idempotency_key))
         except httpx.TimeoutException as error:
@@ -54,6 +56,19 @@ class HttpBankingGateway:
                 detail = response.text
             raise ToolExecutionError(f"Core Banking returned {response.status_code}: {detail}")
         return response.json()
+
+    def list_customer_ids(self) -> list[str]:
+        data = self._request("GET", "/api/customers")
+        if not isinstance(data, list):
+            raise ToolExecutionError("Core Banking returned an invalid customer list")
+        customer_ids = [
+            str(item["customer_id"])
+            for item in data
+            if isinstance(item, dict) and item.get("customer_id")
+        ]
+        if len(customer_ids) != len(data):
+            raise ToolExecutionError("Core Banking returned an invalid customer entry")
+        return customer_ids
 
     def get_financial_context(self, customer_id: str) -> FinancialContext:
         data = self._request("GET", f"/api/customers/{customer_id}/financial-context")

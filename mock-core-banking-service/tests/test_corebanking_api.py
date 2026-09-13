@@ -48,6 +48,18 @@ def test_demo_login_and_financial_context(core_client: TestClient) -> None:
     assert context.json()["recurring_events"][0]["expected_amount"] == "6000000.00"
 
 
+def test_list_customers_returns_every_customer(core_client: TestClient) -> None:
+    response = core_client.get("/api/customers")
+
+    assert response.status_code == 200
+    assert [customer["customer_id"] for customer in response.json()] == [
+        "C001",
+        "C002",
+        "C003",
+        "C004",
+    ]
+
+
 def test_transaction_updates_balance_and_is_idempotent(
     core_client: TestClient, core_session: Session
 ) -> None:

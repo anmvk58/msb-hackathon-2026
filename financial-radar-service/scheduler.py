@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 
 from app.agent.factory import build_agent_runtime
+from app.banking.gateway import build_banking_gateway
 from app.config import get_settings
 from app.database import SessionLocal
 from app.models import ScanTrigger
@@ -25,13 +26,15 @@ def business_today():
 def run_cycle() -> None:
     settings = get_settings()
     runtime = build_agent_runtime(settings=settings)
+    customer_ids = build_banking_gateway(settings).list_customer_ids()
+    logger.info("Discovered %s customers for scheduled scan", len(customer_ids))
     with SessionLocal() as session:
         locked = bool(session.scalar(text("SELECT pg_try_advisory_lock(:lock_id)"), {"lock_id": ADVISORY_LOCK_ID}))
         if not locked:
             logger.info("Skipping cycle because another scheduler owns the lock")
             return
         try:
-            for customer_id in settings.scheduler_customers:
+            for customer_id in customer_ids:
                 try:
                     run_and_record_scan(
                         session,
@@ -52,9 +55,8 @@ def run_cycle() -> None:
 def main() -> None:
     settings = get_settings()
     logger.info(
-        "Scheduler started interval_seconds=%s customers=%s",
+        "Scheduler started interval_seconds=%s customer_source=core_banking",
         settings.scheduler_interval_seconds,
-        ",".join(settings.scheduler_customers),
     )
     while True:
         started = monotonic()

@@ -59,6 +59,9 @@ class FakeBankingGateway:
         self.reminders: list[dict[str, Any]] = []
         self.idempotent_results: dict[str, dict[str, Any]] = {}
 
+    def list_customer_ids(self) -> list[str]:
+        return sorted(self.contexts)
+
     def get_financial_context(self, customer_id: str) -> FinancialContext:
         try:
             return self.contexts[customer_id]

@@ -4,6 +4,27 @@ from app.banking.gateway import HttpBankingGateway
 from tests.fakes import FakeBankingGateway
 
 
+def test_http_gateway_lists_all_customer_ids() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/api/customers"
+        return httpx.Response(
+            200,
+            json=[
+                {"customer_id": "C001"},
+                {"customer_id": "C002"},
+                {"customer_id": "C009"},
+            ],
+        )
+
+    gateway = HttpBankingGateway(
+        base_url="http://corebanking.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert gateway.list_customer_ids() == ["C001", "C002", "C009"]
+
+
 def test_http_gateway_sends_action_id_as_idempotency_key(
     fake_banking_gateway: FakeBankingGateway,
 ) -> None:
