@@ -65,6 +65,9 @@ mock-core-banking-service/
 frontend-mobile/
   src/                    Customer-facing Mobile Banking and Financial Sensing UI
   Dockerfile              Nginx frontend image
+core-banking-admin-service/
+  admin_service/          REST facade and browser-based admin dashboard
+  tests/                  Admin proxy tests
 docker-compose.yml        MySQL + both backend services + frontend
 ```
 
@@ -82,6 +85,11 @@ latency, and the external Core Banking result.
 
 ## Setup and start
 
+For the split cloud deployment (cloud MySQL, separate PostgreSQL, Core/Admin,
+Agent/Scheduler, and Mobile servers), see
+[Production deployment layout](deploy/production/README.md). The root
+`docker-compose.yml` remains the local development stack.
+
 ```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
@@ -92,6 +100,7 @@ docker compose up --build -d
 
 Mobile Banking demo is at `http://localhost:3000`. Agent Swagger is at
 `http://localhost:8080/docs`; Core Banking Swagger is at `http://localhost:8090/docs`.
+Core Banking Admin is at `http://localhost:8100` (no authentication, demo only).
 Core Banking seeds C001-C004 once when its MySQL
 database is empty.
 
@@ -242,7 +251,24 @@ docker compose up --build -d mysql corebanking financial-radar-agent
 - Mobile Banking demo: `http://localhost:3000`
 - Financial Sensing Agent: `http://localhost:8080/docs`
 - Mock Core Banking: `http://localhost:8090/docs`
+- Mock Core Banking Admin: `http://localhost:8100`
 
 Financial Sensing reads all customer context and applies confirmed actions through
 the Core Banking HTTP API. Its local database contains only signals,
 recommendations, and action audit logs.
+
+## Mock Core Banking Admin
+
+`core-banking-admin-service` is an independent administration facade. It never
+connects to the Core Banking database; all reads and writes go through the
+Mock Core Banking Admin REST API. The dashboard supports complete create, read,
+update, and delete operations for customers, accounts, transactions, recurring
+events, budgets, saving goals, reminders, overdraft facilities, term deposits,
+credit cards, and pre-approved loan offers.
+
+This demo intentionally has no authentication. Do not expose port `8100` outside
+a local or otherwise isolated demo environment.
+
+```powershell
+docker compose up --build -d mysql corebanking core-banking-admin
+```

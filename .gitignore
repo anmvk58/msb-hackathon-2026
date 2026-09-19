@@ -5,6 +5,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+deploy/production/*.env
 *.db
 *.sqlite3
 .venv/

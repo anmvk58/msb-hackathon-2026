@@ -19,6 +19,8 @@ class BankingGateway(Protocol):
     def update_goal(self, customer_id: str, goal_id: str, payload: dict[str, Any], *, idempotency_key: str | None) -> dict[str, Any]: ...
 
     def draw_overdraft(self, customer_id: str, facility_id: str, amount: str, *, idempotency_key: str | None) -> dict[str, Any]: ...
+    def activate_m_sinh_loi(self, customer_id: str, minimum_payment_balance: str, *, idempotency_key: str | None) -> dict[str, Any]: ...
+    def sweep_m_sinh_loi(self, customer_id: str) -> dict[str, Any] | None: ...
 
 
 class HttpBankingGateway:
@@ -85,6 +87,15 @@ class HttpBankingGateway:
 
     def draw_overdraft(self, customer_id: str, facility_id: str, amount: str, *, idempotency_key: str | None) -> dict[str, Any]:
         return self._request("POST", f"/api/customers/{customer_id}/overdraft-facilities/{facility_id}/draw", payload={"amount": amount}, idempotency_key=idempotency_key)
+
+    def activate_m_sinh_loi(self, customer_id: str, minimum_payment_balance: str, *, idempotency_key: str | None) -> dict[str, Any]:
+        return self._request("POST", f"/api/customers/{customer_id}/m-sinh-loi", payload={"minimum_payment_balance": minimum_payment_balance}, idempotency_key=idempotency_key)
+
+    def sweep_m_sinh_loi(self, customer_id: str) -> dict[str, Any] | None:
+        account = self._request("GET", f"/api/customers/{customer_id}/m-sinh-loi")
+        if account is None:
+            return None
+        return self._request("POST", f"/api/customers/{customer_id}/m-sinh-loi/sweep")
 
 
 def build_banking_gateway(

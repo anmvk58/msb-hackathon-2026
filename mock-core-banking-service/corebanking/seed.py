@@ -30,6 +30,7 @@ CUSTOMERS = (
     ("C002", "Tran Thu Ha", 32_000_000, 25, 5_000_000, "CONSERVATIVE", 18_500_000),
     ("C003", "Le Quang Huy", 28_000_000, 28, 4_000_000, "BALANCED", 12_000_000),
     ("C004", "Pham Bao Linh", 20_000_000, 25, 3_000_000, "CONSERVATIVE", 7_200_000),
+    ("C005", "Nguyen Thanh Mai", 18_000_000, 25, 5_000_000, "CONSERVATIVE", 30_000_000),
 )
 
 
@@ -79,6 +80,10 @@ def seed_core_banking_demo(session: Session, *, as_of: date = DEMO_AS_OF) -> Non
         when = _shift_month(current_month, offset, 15)
         session.add(_tx(f"T-C002-{when:%Y%m}", "C002", when, amount, Category.FOOD, "Food merchants"))
     session.add(_tx("T-C002-CURRENT", "C002", as_of, 5_000_000, Category.FOOD, "Food merchants"))
+    session.add_all([
+        _tx("T-C005-001", "C005", as_of - timedelta(days=24), 320_000, Category.FOOD, "Siêu thị"),
+        _tx("T-C005-002", "C005", as_of - timedelta(days=8), 450_000, Category.UTILITY, "Hóa đơn điện"),
+    ])
     session.add(SavingGoal(goal_id="G-C003-HOME", customer_id="C003", goal_name="Home deposit", target_amount=Decimal(100_000_000), current_amount=Decimal(22_000_000), start_date=_shift_month(current_month, -4), target_date=_shift_month(current_month, 8) - timedelta(days=1), monthly_contribution=Decimal(8_333_333), status="ACTIVE"))
     session.add(RecurringEvent(recurring_id="R-C004-RENT", customer_id="C004", name="Rent", category=Category.RENT, expected_amount=Decimal(8_000_000), expected_day=(as_of + timedelta(days=2)).day, frequency="MONTHLY", confidence=Decimal("0.99"), active_flag=True))
     session.add(Budget(budget_id="B-C002-FOOD", customer_id="C002", category=Category.FOOD, amount=Decimal(6_000_000), spent_amount=Decimal(5_000_000), alert_threshold=Decimal("0.80"), start_date=current_month, end_date=current_month.replace(day=calendar.monthrange(as_of.year, as_of.month)[1]), status="ACTIVE"))
@@ -94,6 +99,17 @@ def seed_core_banking_demo(session: Session, *, as_of: date = DEMO_AS_OF) -> Non
 def seed_core_banking_if_empty(session: Session) -> bool:
     count = session.scalar(select(func.count()).select_from(Customer)) or 0
     if count:
+        if session.get(Customer, "C005") is None:
+            as_of = datetime.now(BUSINESS_TIMEZONE).date()
+            session.add(Customer(customer_id="C005", customer_name="Nguyen Thanh Mai", monthly_income=Decimal(18_000_000), salary_day=25, preferred_safe_balance=Decimal(5_000_000), risk_preference="CONSERVATIVE", created_at=datetime.utcnow()))
+            session.flush()
+            session.add(Account(account_id="A-C005", customer_id="C005", account_type="PAYMENT", available_balance=Decimal(30_000_000), currency="VND", updated_at=datetime.utcnow()))
+            session.flush()
+            session.add_all([
+                _tx("T-C005-001", "C005", as_of - timedelta(days=24), 320_000, Category.FOOD, "Siêu thị"),
+                _tx("T-C005-002", "C005", as_of - timedelta(days=8), 450_000, Category.UTILITY, "Hóa đơn điện"),
+            ])
+            session.commit()
         customer = session.get(Customer, "C004")
         if customer and session.get(OverdraftFacility, "OD-C004-001") is None:
             as_of = datetime.now(BUSINESS_TIMEZONE).date()

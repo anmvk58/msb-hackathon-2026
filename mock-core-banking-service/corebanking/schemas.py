@@ -51,6 +51,26 @@ class AccountRead(ORMModel):
     updated_at: datetime
 
 
+class MSinhLoiRead(ORMModel):
+    account_id: str
+    customer_id: str
+    payment_account_id: str
+    balance: Decimal
+    minimum_payment_balance: Decimal
+    sweep_hour: int
+    status: str
+    last_sweep_date: date | None
+    created_at: datetime
+
+
+class MSinhLoiCreate(BaseModel):
+    minimum_payment_balance: Decimal = Field(ge=Decimal("1000000"), le=Decimal("1000000000"))
+
+
+class MSinhLoiTransfer(BaseModel):
+    amount: Decimal = Field(gt=0, le=Decimal("1000000000"))
+
+
 class OverdraftRead(ORMModel):
     facility_id: str; customer_id: str; account_id: str
     credit_limit: Decimal; used_amount: Decimal
@@ -292,4 +312,5 @@ class FinancialContext(BaseModel):
     term_deposits: list[TermDepositRead]
     credit_cards: list[CreditCardRead]
     preapproved_loan_offers: list[LoanOfferRead]
+    m_sinh_loi: MSinhLoiRead | None = None
     generated_at: datetime

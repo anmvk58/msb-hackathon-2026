@@ -1,0 +1,37 @@
+services:
+  corebanking:
+    build:
+      context: ../../mock-core-banking-service
+    env_file: ./core.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      CORE_BANKING_SEED_DEMO_ON_START: ${CORE_BANKING_SEED_DEMO_ON_START:-false}
+    ports:
+      - "${CORE_BIND_IP:?Set CORE_BIND_IP to the private server IP}:8090:8090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  core-banking-admin:
+    build:
+      context: ../../core-banking-admin-service
+    env_file: ./core.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      ADMIN_CORE_BANKING_BASE_URL: http://corebanking:8090
+    ports:
+      - "127.0.0.1:8100:8100"
+    depends_on:
+      corebanking:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

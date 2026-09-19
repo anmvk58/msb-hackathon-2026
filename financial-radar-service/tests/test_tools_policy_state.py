@@ -25,6 +25,8 @@ def test_registry_exposes_exact_mvp_tools() -> None:
         "create_reminder",
         "update_goal",
         "prepare_funding_option",
+        "review_term_saving",
+        "activate_m_sinh_loi",
     }
 
 

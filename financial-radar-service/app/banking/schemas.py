@@ -112,4 +112,5 @@ class FinancialContext(BaseModel):
     term_deposits: list[TermDepositData] = []
     credit_cards: list[CreditCardData] = []
     preapproved_loan_offers: list[LoanOfferData] = []
+    m_sinh_loi: dict | None = None
     generated_at: datetime

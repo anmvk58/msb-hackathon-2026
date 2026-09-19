@@ -164,6 +164,30 @@ class ToolInvocation(BaseModel):
     arguments: dict[str, Any]
 
 
+class ReviewTermSavingInput(CustomerInput):
+    term_months: Literal[3, 6]
+
+
+class ReviewTermSavingOutput(BaseModel):
+    status: str
+    customer_id: str
+    term_months: int
+    message: str
+
+
+class ActivateMSinhLoiInput(CustomerInput):
+    minimum_payment_balance: Decimal = Field(ge=Decimal("1000000"), le=Decimal("1000000000"))
+
+
+class ActivateMSinhLoiOutput(BaseModel):
+    status: str
+    customer_id: str
+    account_id: str
+    balance: Decimal
+    minimum_payment_balance: Decimal
+    sweep_hour: int
+
+
 class ToolInvocationResult(BaseModel):
     tool: str
     output: dict[str, Any]

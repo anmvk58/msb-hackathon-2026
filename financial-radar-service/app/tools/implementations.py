@@ -11,6 +11,7 @@ from app.tools.schemas import (
     FinancialSnapshotOutput, GoalSimulationInput, GoalSimulationOutput,
     RecurringInput, RecurringOutput, SpendingAnomalyInput, SpendingAnomalyOutput,
     UpdateGoalInput, UpdateGoalOutput, PrepareFundingInput, PrepareFundingOutput,
+    ReviewTermSavingInput, ReviewTermSavingOutput, ActivateMSinhLoiInput, ActivateMSinhLoiOutput,
 )
 
 
@@ -164,6 +165,40 @@ class PrepareFundingOptionTool(GatewayTool):
         return PrepareFundingOutput(status="PREPARED", **arguments.model_dump())
 
 
+class ReviewTermSavingTool(GatewayTool):
+    name = "review_term_saving"
+    description = "Explain a possible term saving duration without opening a deposit."
+    risk_level = RiskLevel.LOW
+    confirmation_policy = ConfirmationPolicy.NONE
+    input_model = ReviewTermSavingInput
+    output_model = ReviewTermSavingOutput
+
+    def execute(self, session: Session, arguments: ReviewTermSavingInput, *, idempotency_key: str | None = None) -> ReviewTermSavingOutput:
+        del session, idempotency_key
+        self.gateway.get_financial_context(arguments.customer_id)
+        return ReviewTermSavingOutput(status="REVIEW_ONLY", customer_id=arguments.customer_id, term_months=arguments.term_months, message="Vui lòng kiểm tra lãi suất và điều kiện rút trước hạn trước khi mở tiền gửi.")
+
+
+class ActivateMSinhLoiTool(GatewayTool):
+    name = "activate_m_sinh_loi"
+    description = "Activate the synthetic M-Sinh lời account after explicit customer confirmation."
+    risk_level = RiskLevel.MEDIUM
+    confirmation_policy = ConfirmationPolicy.EXPLICIT
+    input_model = ActivateMSinhLoiInput
+    output_model = ActivateMSinhLoiOutput
+
+    def execute(self, session: Session, arguments: ActivateMSinhLoiInput, *, idempotency_key: str | None = None) -> ActivateMSinhLoiOutput:
+        del session
+        context = self.gateway.get_financial_context(arguments.customer_id)
+        if context.m_sinh_loi is not None:
+            raise ValueError("M-Sinh lời đã được kích hoạt")
+        payment = next((item for item in context.accounts if item.account_type == "PAYMENT"), None)
+        if payment is None or arguments.minimum_payment_balance > payment.available_balance:
+            raise ValueError("Số dư tối thiểu phải không vượt quá số dư tài khoản thanh toán")
+        result = self.gateway.activate_m_sinh_loi(arguments.customer_id, str(arguments.minimum_payment_balance), idempotency_key=idempotency_key)
+        return ActivateMSinhLoiOutput(status="SUCCESS", customer_id=arguments.customer_id, account_id=result["account_id"], balance=result["balance"], minimum_payment_balance=result["minimum_payment_balance"], sweep_hour=result["sweep_hour"])
+
+
 def build_mvp_tools(gateway: BankingGateway) -> tuple[GatewayTool, ...]:
     return (
         GetFinancialSnapshotTool(gateway), DetectSpendingAnomalyTool(gateway),
@@ -171,4 +206,5 @@ def build_mvp_tools(gateway: BankingGateway) -> tuple[GatewayTool, ...]:
         SimulateGoalScenariosTool(gateway), CreateBudgetTool(gateway),
         CreateReminderTool(gateway), UpdateGoalTool(gateway),
         PrepareFundingOptionTool(gateway),
+        ReviewTermSavingTool(gateway), ActivateMSinhLoiTool(gateway),
     )

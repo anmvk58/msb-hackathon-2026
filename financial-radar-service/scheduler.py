@@ -26,7 +26,8 @@ def business_today():
 def run_cycle() -> None:
     settings = get_settings()
     runtime = build_agent_runtime(settings=settings)
-    customer_ids = build_banking_gateway(settings).list_customer_ids()
+    gateway = build_banking_gateway(settings)
+    customer_ids = gateway.list_customer_ids()
     logger.info("Discovered %s customers for scheduled scan", len(customer_ids))
     with SessionLocal() as session:
         locked = bool(session.scalar(text("SELECT pg_try_advisory_lock(:lock_id)"), {"lock_id": ADVISORY_LOCK_ID}))
@@ -36,6 +37,8 @@ def run_cycle() -> None:
         try:
             for customer_id in customer_ids:
                 try:
+                    if datetime.now(BUSINESS_TIMEZONE).hour >= 16:
+                        gateway.sweep_m_sinh_loi(customer_id)
                     run_and_record_scan(
                         session,
                         runtime,

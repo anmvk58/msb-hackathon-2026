@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,9 +17,10 @@ from corebanking.database import (
     get_core_banking_db,
 )
 from corebanking.idempotency import remember, replay
-from corebanking.models import Account, Budget, Category, CreditCard, Customer, Direction, OverdraftFacility, PreapprovedLoanOffer, RecurringEvent, Reminder, SavingGoal, TermDeposit, Transaction
+from corebanking.models import Account, Budget, Category, CreditCard, Customer, Direction, MSinhLoiAccount, OverdraftFacility, PreapprovedLoanOffer, RecurringEvent, Reminder, SavingGoal, TermDeposit, Transaction
 from corebanking.schemas import (
     AccountRead,
+    MSinhLoiCreate, MSinhLoiRead, MSinhLoiTransfer,
     BudgetCreate,
     BudgetRead,
     CustomerRead,
@@ -41,6 +43,7 @@ from corebanking.schemas import (
     TransactionRead,
 )
 from corebanking.seed import seed_core_banking_if_empty
+from corebanking.admin import router as admin_router
 
 
 DESCRIPTION = """
@@ -48,7 +51,7 @@ Mock Core Banking API sở hữu dữ liệu nghiệp vụ cho Mobile Banking de
 Financial Sensing Agent.
 
 ### Phạm vi
-- Dữ liệu hoàn toàn giả lập (`C001`–`C004`), không kết nối hệ thống MSB thật.
+- Dữ liệu hoàn toàn giả lập (`C001`–`C005`), không kết nối hệ thống MSB thật.
 - `demo-login` không phải cơ chế xác thực production.
 - Các write API hỗ trợ `Idempotency-Key` để Agent retry an toàn.
 - Agent phải dùng REST API này, không truy cập trực tiếp database Core Banking.
@@ -64,6 +67,7 @@ TAGS = [
     {"name": "Budgets", "description": "Ngân sách được áp dụng vào Mobile Banking demo."},
     {"name": "Goals", "description": "Mục tiêu tiết kiệm của khách hàng."},
     {"name": "Reminders", "description": "Nhắc nhở hiển thị trong ứng dụng demo."},
+    {"name": "Admin CRUD", "description": "CRUD toàn bộ dữ liệu giả lập; không có authentication."},
 ]
 
 
@@ -90,6 +94,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(admin_router)
 
 DbSession = Annotated[Session, Depends(get_core_banking_db)]
 IdempotencyKey = Annotated[str | None, Header(alias="Idempotency-Key", max_length=100)]
@@ -144,6 +149,7 @@ def financial_context(
     deposits = list(session.scalars(select(TermDeposit).where(TermDeposit.customer_id == customer_id, TermDeposit.status == "ACTIVE")).all())
     cards = list(session.scalars(select(CreditCard).where(CreditCard.customer_id == customer_id, CreditCard.status == "ACTIVE")).all())
     offers = list(session.scalars(select(PreapprovedLoanOffer).where(PreapprovedLoanOffer.customer_id == customer_id, PreapprovedLoanOffer.status == "ACTIVE")).all())
+    m_sinh_loi = session.scalar(select(MSinhLoiAccount).where(MSinhLoiAccount.customer_id == customer_id))
     return FinancialContext(
         customer=CustomerRead.model_validate(customer),
         accounts=[AccountRead.model_validate(item) for item in accounts],
@@ -155,6 +161,7 @@ def financial_context(
         term_deposits=[TermDepositRead.model_validate(item) for item in deposits],
         credit_cards=[CreditCardRead.model_validate(item) for item in cards],
         preapproved_loan_offers=[LoanOfferRead.model_validate(item) for item in offers],
+        m_sinh_loi=MSinhLoiRead.model_validate(m_sinh_loi) if m_sinh_loi else None,
         generated_at=datetime.utcnow(),
     )
 
@@ -205,6 +212,82 @@ def update_recurring_event(customer_id: str, recurring_id: str, payload: Recurri
 def get_accounts(customer_id: str, session: DbSession) -> list[Account]:
     _customer_or_404(session, customer_id)
     return list(session.scalars(select(Account).where(Account.customer_id == customer_id)).all())
+
+
+@app.get("/api/customers/{customer_id}/m-sinh-loi", response_model=MSinhLoiRead | None, tags=["Accounts"])
+def get_m_sinh_loi(customer_id: str, session: DbSession) -> MSinhLoiAccount | None:
+    _customer_or_404(session, customer_id)
+    return session.scalar(select(MSinhLoiAccount).where(MSinhLoiAccount.customer_id == customer_id))
+
+
+@app.post("/api/customers/{customer_id}/m-sinh-loi", response_model=MSinhLoiRead, tags=["Accounts"])
+def create_m_sinh_loi(customer_id: str, payload: MSinhLoiCreate, session: DbSession, idempotency_key: IdempotencyKey = None) -> MSinhLoiRead:
+    operation = f"create-m-sinh-loi:{customer_id}"
+    cached = replay(session, operation=operation, key=idempotency_key, response_model=MSinhLoiRead)
+    if cached:
+        return cached
+    _customer_or_404(session, customer_id)
+    existing = session.scalar(select(MSinhLoiAccount).where(MSinhLoiAccount.customer_id == customer_id))
+    if existing:
+        raise HTTPException(status_code=409, detail="M-Sinh lời đã được kích hoạt")
+    payment = session.scalar(select(Account).where(Account.customer_id == customer_id, Account.account_type == "PAYMENT").with_for_update())
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Payment account not found")
+    if payload.minimum_payment_balance > payment.available_balance:
+        raise HTTPException(status_code=422, detail="Minimum payment balance exceeds available balance")
+    initial_transfer = payment.available_balance - payload.minimum_payment_balance
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).replace(tzinfo=None)
+    account = MSinhLoiAccount(account_id=f"MSL-{customer_id}", customer_id=customer_id, payment_account_id=payment.account_id, balance=initial_transfer, minimum_payment_balance=payload.minimum_payment_balance, sweep_hour=16, status="ACTIVE", last_sweep_date=now.date())
+    if initial_transfer:
+        payment.available_balance -= initial_transfer
+        payment.updated_at = now
+        session.add(Transaction(transaction_id=f"TX-{uuid4().hex[:16].upper()}", customer_id=customer_id, account_id=payment.account_id, transaction_date=now.date(), amount=initial_transfer, direction=Direction.DEBIT, merchant="M-Sinh lời", description="Chuyển số dư ban đầu sang M-Sinh lời", category=Category.TRANSFER, transaction_type="M_SINH_LOI_INITIAL"))
+    session.add(account)
+    session.flush()
+    result = MSinhLoiRead.model_validate(account)
+    remember(session, operation=operation, key=idempotency_key, response=result)
+    session.commit()
+    return result
+
+
+@app.post("/api/customers/{customer_id}/m-sinh-loi/sweep", response_model=MSinhLoiRead, tags=["Accounts"])
+def sweep_m_sinh_loi(customer_id: str, session: DbSession, demo_now: bool = False) -> MSinhLoiRead:
+    _customer_or_404(session, customer_id)
+    account = session.scalar(select(MSinhLoiAccount).where(MSinhLoiAccount.customer_id == customer_id).with_for_update())
+    if account is None or account.status != "ACTIVE":
+        raise HTTPException(status_code=404, detail="Active M-Sinh lời account not found")
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).replace(tzinfo=None)
+    if not demo_now and (now.hour < account.sweep_hour or account.last_sweep_date == now.date()):
+        return MSinhLoiRead.model_validate(account)
+    payment = session.scalar(select(Account).where(Account.account_id == account.payment_account_id).with_for_update())
+    excess = max(Decimal(0), payment.available_balance - account.minimum_payment_balance)
+    if excess:
+        payment.available_balance -= excess
+        account.balance += excess
+        payment.updated_at = now
+        session.add(Transaction(transaction_id=f"TX-{uuid4().hex[:16].upper()}", customer_id=customer_id, account_id=payment.account_id, transaction_date=now.date(), amount=excess, direction=Direction.DEBIT, merchant="M-Sinh lời", description="Chuyển tiền dư theo ngưỡng 16h", category=Category.TRANSFER, transaction_type="M_SINH_LOI_SWEEP"))
+    account.last_sweep_date = now.date()
+    session.commit()
+    session.refresh(account)
+    return MSinhLoiRead.model_validate(account)
+
+
+@app.post("/api/customers/{customer_id}/m-sinh-loi/withdraw", response_model=MSinhLoiRead, tags=["Accounts"])
+def withdraw_m_sinh_loi(customer_id: str, payload: MSinhLoiTransfer, session: DbSession) -> MSinhLoiRead:
+    _customer_or_404(session, customer_id)
+    account = session.scalar(select(MSinhLoiAccount).where(MSinhLoiAccount.customer_id == customer_id).with_for_update())
+    if account is None or account.status != "ACTIVE":
+        raise HTTPException(status_code=404, detail="Active M-Sinh lời account not found")
+    if payload.amount > account.balance:
+        raise HTTPException(status_code=409, detail="Insufficient M-Sinh lời balance")
+    payment = session.scalar(select(Account).where(Account.account_id == account.payment_account_id).with_for_update())
+    account.balance -= payload.amount
+    payment.available_balance += payload.amount
+    payment.updated_at = datetime.utcnow()
+    session.add(Transaction(transaction_id=f"TX-{uuid4().hex[:16].upper()}", customer_id=customer_id, account_id=payment.account_id, transaction_date=datetime.utcnow().date(), amount=payload.amount, direction=Direction.CREDIT, merchant="M-Sinh lời", description="Rút linh hoạt từ M-Sinh lời", category=Category.TRANSFER, transaction_type="M_SINH_LOI_WITHDRAWAL"))
+    session.commit()
+    session.refresh(account)
+    return MSinhLoiRead.model_validate(account)
 
 
 @app.post("/api/customers/{customer_id}/overdraft-facilities/{facility_id}/draw", response_model=OverdraftDrawResponse, tags=["Accounts"], summary="Sử dụng hạn mức thấu chi")

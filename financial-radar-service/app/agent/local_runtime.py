@@ -325,6 +325,12 @@ class LocalAgentRuntime(AgentRuntime):
         liquidity = _liquidity_context(
             snapshot=snapshot, recurring=recurring, as_of=as_of
         )
+        banking_context = self.registry.gateway.get_financial_context(customer_id)
+        payment_balance = sum((item.available_balance for item in banking_context.accounts if item.account_type == "PAYMENT"), Decimal(0))
+        recent_debits = [item for item in banking_context.recent_transactions if item.direction.value == "DEBIT" and (as_of - timedelta(days=30)) <= item.transaction_date <= as_of]
+        debit_total = sum((item.amount for item in recent_debits), Decimal(0))
+        idle_cash = (payment_balance >= Decimal(25_000_000) and len(recent_debits) <= 3 and debit_total <= Decimal(3_000_000) and getattr(banking_context, "m_sinh_loi", None) is None)
+        idle_analysis = {"payment_balance": str(payment_balance), "debit_count_30d": len(recent_debits), "debit_total_30d": str(debit_total), "safe_balance": str(banking_context.customer.preferred_safe_balance)}
         risk_flags = {
             "cashflow_risk": forecast.risk_level != "LOW",
             "spending_anomaly": bool(anomaly.anomalies),
@@ -333,6 +339,7 @@ class LocalAgentRuntime(AgentRuntime):
             "has_upcoming_obligation": liquidity["has_upcoming_obligation"],
             "has_liquidity_shortfall": liquidity["has_liquidity_shortfall"],
             "has_income_timing_gap": liquidity["has_income_timing_gap"],
+            "idle_cash": idle_cash,
         }
         all_analysis = {
             "cashflow": _json(forecast),
@@ -340,6 +347,7 @@ class LocalAgentRuntime(AgentRuntime):
             "goal": _json(goal) if goal else None,
             "recurring": _json(recurring),
             "liquidity": liquidity,
+            "idle_cash": idle_analysis,
         }
 
         primary_type: SignalType | None = None
@@ -356,6 +364,9 @@ class LocalAgentRuntime(AgentRuntime):
         elif risk_flags["upcoming_recurring"]:
             primary_type = SignalType.UPCOMING_RECURRING
             analysis = _json(recurring)
+        elif risk_flags["idle_cash"]:
+            primary_type = SignalType.IDLE_CASH
+            analysis = idle_analysis
         else:
             state.financial_analysis = {
                 **_json(forecast),

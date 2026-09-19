@@ -53,6 +53,20 @@ class Account(CoreBankingBase):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class MSinhLoiAccount(CoreBankingBase):
+    __tablename__ = "m_sinh_loi_accounts"
+
+    account_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), unique=True, index=True)
+    payment_account_id: Mapped[str] = mapped_column(ForeignKey("accounts.account_id"))
+    balance: Mapped[Decimal] = mapped_column(money, default=0)
+    minimum_payment_balance: Mapped[Decimal] = mapped_column(money)
+    sweep_hour: Mapped[int] = mapped_column(default=16)
+    status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
+    last_sweep_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class OverdraftFacility(CoreBankingBase):
     __tablename__ = "overdraft_facilities"
     facility_id: Mapped[str] = mapped_column(String(40), primary_key=True)

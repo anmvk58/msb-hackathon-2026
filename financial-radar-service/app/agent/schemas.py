@@ -9,7 +9,7 @@ from app.agent.state import ActionDraft, AgentLifecycle, RecommendationOption
 class AgentRunRequest(BaseModel):
     model_config = ConfigDict(json_schema_extra={"examples": [{"customer_id": "C001", "message": "Phân tích tài chính và đề xuất hành động phù hợp", "as_of": "2026-09-02"}]})
 
-    customer_id: str = Field(description="Mã khách hàng; dữ liệu demo có C001 đến C004", examples=["C001"])
+    customer_id: str = Field(description="Mã khách hàng; dữ liệu demo có C001 đến C005", examples=["C001"])
     message: str = Field(min_length=1, max_length=2000, description="Yêu cầu bằng ngôn ngữ tự nhiên gửi tới Agent")
     as_of: date | None = Field(default=None, description="Ngày phân tích; bỏ trống để dùng ngày hiện tại")
 

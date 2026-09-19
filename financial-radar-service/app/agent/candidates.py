@@ -26,6 +26,17 @@ class CandidateActionGenerator:
         primary_type: SignalType,
         analysis: dict[str, Any],
     ) -> CandidateActionPlan:
+        if primary_type == SignalType.IDLE_CASH:
+            return CandidateActionPlan.model_validate({
+                "problem": "IDLE_CASH", "severity": "LOW",
+                "summary_hint": f"Số dư tài khoản thanh toán khoảng {_vnd(analysis['payment_balance'])} VND, chỉ có {analysis['debit_count_30d']} giao dịch chi trong 30 ngày, tổng {_vnd(analysis['debit_total_30d'])} VND. Có thể cân nhắc gửi tiết kiệm kỳ hạn 3 hoặc 6 tháng; nếu cần dùng tiền linh hoạt, hãy trao đổi thêm trước khi quyết định.",
+                "reasoning_hint": "Số dư cao và chi tiêu ít; cần hỏi nhu cầu thanh khoản trước khi mở sản phẩm.",
+                "evidence": [{"source": "core_banking_transactions", "metric": "idle_cash", "value": analysis['payment_balance'], "context": analysis}],
+                "candidate_options": [
+                    {"option_id": "A", "title": "Cân nhắc gửi tiết kiệm 3 tháng", "description": "Phù hợp nếu bạn chưa cần dùng khoản tiền này trong 3 tháng. Trao đổi thêm trước khi mở sản phẩm.", "action_type": "review_term_saving", "parameters": {"customer_id": customer_id, "term_months": 3}, "expected_impact": "Tiền nhàn rỗi có cơ hội sinh lãi theo điều kiện sản phẩm tại thời điểm mở."},
+                    {"option_id": "B", "title": "Cân nhắc gửi tiết kiệm 6 tháng", "description": "Phù hợp nếu bạn chưa cần dùng khoản tiền này trong 6 tháng. Trao đổi thêm trước khi mở sản phẩm.", "action_type": "review_term_saving", "parameters": {"customer_id": customer_id, "term_months": 6}, "expected_impact": "Tiền nhàn rỗi có cơ hội sinh lãi theo điều kiện sản phẩm tại thời điểm mở."},
+                ], "default_option_id": "A",
+            })
         if primary_type == SignalType.CASHFLOW_RISK:
             guardrail = calculate_budget_guardrail(
                 self.gateway.get_financial_context(customer_id), customer_id, Category.SHOPPING

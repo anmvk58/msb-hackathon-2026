@@ -1,0 +1,30 @@
+services:
+  financial-radar-agent:
+    build:
+      context: ../../financial-radar-service
+    env_file: ./agent.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      APP_ENV: production
+    ports:
+      - "${AGENT_BIND_IP:?Set AGENT_BIND_IP to the private server IP}:8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  financial-radar-scheduler:
+    build:
+      context: ../../financial-radar-service
+    command: ["python", "scheduler.py"]
+    env_file: ./agent.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      APP_ENV: production
+    depends_on:
+      financial-radar-agent:
+        condition: service_healthy
+    restart: unless-stopped

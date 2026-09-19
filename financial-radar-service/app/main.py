@@ -1,7 +1,8 @@
 import json
+from pathlib import Path
 from datetime import date, datetime
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
@@ -52,6 +53,7 @@ from app.tools.schemas import (
     SpendingAnomalyInput,
     SpendingAnomalyOutput,
     UpdateGoalInput,
+    ActivateMSinhLoiInput,
 )
 
 
@@ -107,6 +109,7 @@ registry = build_tool_registry()
 settings = get_settings()
 runtime = build_agent_runtime(settings=settings, registry=registry)
 BUSINESS_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
+M_SINH_LOI_KNOWLEDGE = (Path(__file__).parent / "knowledge" / "m_sinh_loi.md").read_text(encoding="utf-8")
 
 
 def business_today() -> date:
@@ -127,6 +130,28 @@ class FinancialChatRequest(BaseModel):
 
 class FinancialChatResponse(BaseModel):
     reply: str
+    action_offer: str | None = None
+
+
+class ChatIntentDecision(BaseModel):
+    intent: Literal["EXPLORE_FLEXIBLE", "ACCEPT_M_SINH_LOI", "OTHER"]
+    reply: str = Field(min_length=1, max_length=2000)
+
+
+M_SINH_LOI_CHAT_PROMPT = (
+    "Bạn là FinSen, trợ lý tài chính trong ứng dụng demo. Đọc toàn bộ hội thoại nhưng "
+    "phân loại ý định từ lời NHẮN MỚI NHẤT của khách hàng. "
+    "EXPLORE_FLEXIBLE: khách nói có thể cần dùng tiền, muốn rút linh hoạt hoặc hỏi giải pháp "
+    "sinh lời linh hoạt, nhưng CHƯA đồng ý kích hoạt sản phẩm. "
+    "ACCEPT_M_SINH_LOI: khách thể hiện rõ muốn sử dụng hoặc thiết lập M-Sinh lời; "
+    "lời đồng ý ngắn chỉ đủ nghĩa khi hội thoại ngay trước đó đã giới thiệu M-Sinh lời. "
+    "OTHER: khách từ chối, hỏi chuyện khác, hoặc ý định chưa rõ. "
+    "Không suy ra sự đồng ý chỉ từ việc khách quan tâm sản phẩm. "
+    "Viết reply tự nhiên, ngắn gọn bằng tiếng Việt. Khi nói về M-Sinh lời, phải nêu đây "
+    "là khoản cho SBSI vay, không phải tiền gửi tiết kiệm MSB. Không hứa lợi tức hay "
+    "khẳng định đã kích hoạt. Sau khi khách đồng ý, hướng dẫn chọn Action và xác nhận.\n\n"
+    + M_SINH_LOI_KNOWLEDGE
+)
 
 
 def _run_scan_background(scan_id: str) -> None:
@@ -164,11 +189,7 @@ def health() -> dict[str, str]:
     return {
         "status": "healthy",
         "runtime": type(runtime).__name__,
-        "llm_provider": (
-            settings.llm_provider
-            if settings.agent_runtime == "greennode"
-            else "mock"
-        ),
+        "llm_provider": settings.llm_provider,
     }
 
 
@@ -177,6 +198,30 @@ def financial_chat(payload: FinancialChatRequest, session: DbSession) -> Financi
     try:
         context = registry.gateway.get_financial_context(payload.customer_id)
         latest = get_latest_completed_scan(session, payload.customer_id)
+        idle_cash_case = bool(latest and latest.result and (latest.result.analysis or {}).get("risk_flags", {}).get("idle_cash") and context.m_sinh_loi is None)
+        if idle_cash_case:
+            decision = runtime.llm.generate_structured(
+                system_prompt=M_SINH_LOI_CHAT_PROMPT,
+                user_prompt="Phân loại ý định của lời nhắn mới nhất và trả lời khách hàng.",
+                response_model=ChatIntentDecision,
+                context={
+                    "history": [item.model_dump() for item in payload.history],
+                    "latest_user_message": payload.message,
+                    "current_payment_balance": str(next((item.available_balance for item in context.accounts if item.account_type == "PAYMENT"), 0)),
+                    "safe_balance": str(context.customer.preferred_safe_balance),
+                    "latest_recommendations": [item.model_dump(mode="json") for item in latest.result.recommendations],
+                    "m_sinh_loi_active": False,
+                },
+            )
+            if decision.intent == "ACCEPT_M_SINH_LOI":
+                return FinancialChatResponse(
+                    reply="Được, tôi đã đổi gợi ý sang M-Sinh lời. Hãy chọn hành động mới bên trên, nhập số dư tối thiểu và xác nhận. Sau xác nhận, bản demo sẽ chuyển ngay phần vượt ngưỡng; từ ngày tiếp theo kiểm tra phần dư lúc 16h. Đây là khoản cho SBSI vay, không phải tiền gửi tiết kiệm tại MSB.",
+                    action_offer="ACTIVATE_M_SINH_LOI",
+                )
+            reply = decision.reply.strip()
+            if decision.intent == "EXPLORE_FLEXIBLE" and ("SBSI" not in reply or "không phải tiền gửi" not in reply.lower()):
+                reply += " M-Sinh lời là khoản bạn cho SBSI vay qua nền tảng tích hợp MSB, không phải tiền gửi tiết kiệm tại MSB."
+            return FinancialChatResponse(reply=reply)
         compact_context = {
             "customer": context.customer.model_dump(mode="json"),
             "accounts": [item.model_dump(mode="json") for item in context.accounts],
@@ -188,6 +233,7 @@ def financial_chat(payload: FinancialChatRequest, session: DbSession) -> Financi
             "term_deposits": [item.model_dump(mode="json") for item in context.term_deposits],
             "credit_cards": [item.model_dump(mode="json") for item in context.credit_cards],
             "preapproved_loan_offers": [item.model_dump(mode="json") for item in context.preapproved_loan_offers],
+            "m_sinh_loi": context.m_sinh_loi,
             "latest_financial_sensing": (
                 latest.result.model_dump(mode="json")
                 if latest and latest.result
@@ -212,7 +258,8 @@ def financial_chat(payload: FinancialChatRequest, session: DbSession) -> Financi
                 "chi tiêu, dòng tiền, tiết kiệm và kiến thức tài chính liên quan. Không khẳng định chắc "
                 "chắn về tương lai, không hứa lợi nhuận, không yêu cầu mật khẩu hoặc OTP và không tuyên "
                 "bố đã thực hiện giao dịch. Với quyết định vay hoặc đầu tư, nêu rủi ro và khuyên khách "
-                "hàng cân nhắc điều kiện sản phẩm. Không dùng Markdown phức tạp; tối đa khoảng 180 từ."
+                "hàng cân nhắc điều kiện sản phẩm. Không dùng Markdown phức tạp; tối đa khoảng 180 từ.\n\n"
+                + M_SINH_LOI_KNOWLEDGE
             ),
             user_prompt=user_prompt,
         ).strip()
@@ -340,6 +387,11 @@ def api_create_reminder(payload: CreateReminderInput, session: DbSession) -> Age
 @app.post("/api/actions/update-goal", response_model=AgentResponse, tags=["Demo actions"], summary="Chuẩn bị cập nhật mục tiêu demo", description="Sau xác nhận sẽ cập nhật mục tiêu qua Mock Core Banking; chưa kết nối Core Banking MSB thật.")
 def api_update_goal(payload: UpdateGoalInput, session: DbSession) -> AgentResponse:
     return _prepare_direct_action(session, "update_goal", payload)
+
+
+@app.post("/api/actions/activate-m-sinh-loi", response_model=AgentResponse, tags=["Demo actions"], summary="Chuẩn bị kích hoạt M-Sinh lời mô phỏng")
+def api_activate_m_sinh_loi(payload: ActivateMSinhLoiInput, session: DbSession) -> AgentResponse:
+    return _prepare_direct_action(session, "activate_m_sinh_loi", payload)
 
 
 @app.post("/api/agent/run", response_model=AgentResponse, tags=["Agent workflow"], summary="Chạy Agent Financial Sensing", description="Điểm vào chính: phân tích khách hàng, gọi LLM để diễn giải và trả về các lựa chọn khuyến nghị. Dùng `C001` cho demo.")

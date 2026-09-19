@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MSB Mock Core Banking Admin</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI",Arial,sans-serif;color:#1f1f1f;background:#f5f7fa;--ink:#1f1f1f;--muted:#697586;--line:#e5e9f0;--surface:#fff;--soft:#f5f8ff;--accent:#1677ff;--accent-hover:#0958d9;--danger:#d9363e}*{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:radial-gradient(circle at 88% -8%,#e6f4ff 0,transparent 34%),#f5f7fa}
+    header{height:82px;background:rgba(255,255,255,.92);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 32px;backdrop-filter:blur(12px);position:sticky;top:0;z-index:10}
+    .brand{display:flex;align-items:center;gap:14px}.mark{width:42px;height:42px;border-radius:12px;background:linear-gradient(145deg,#4096ff,#0958d9);color:#fff;display:grid;place-items:center;font-weight:750;letter-spacing:-1px;box-shadow:0 7px 18px #1677ff38}
+    header h1{margin:0;font-size:19px;letter-spacing:-.25px}header p{margin:4px 0 0;color:var(--muted);font-size:13px}.status{display:flex;align-items:center;gap:8px;padding:7px 11px;border:1px solid #b7ebc6;border-radius:99px;color:#287d43;background:#f6ffed;font-size:12px;font-weight:650}.dot{width:7px;height:7px;border-radius:50%;background:#52c41a;box-shadow:0 0 0 4px #52c41a18}
+    main{display:grid;grid-template-columns:290px minmax(0,1fr);gap:20px;padding:24px 32px 38px;max-width:1600px;margin:auto}.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 30px #343b4110;padding:20px}.sidebar{align-self:start;position:sticky;top:106px}
+    .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#8a9096;font-weight:750}h2{font-size:17px;margin:3px 0 0;letter-spacing:-.2px}
+    input,select,textarea,button{width:100%;border:1px solid #d9dfe8;border-radius:9px;padding:10px 12px;margin:5px 0;font:inherit;transition:.16s ease}input,select,textarea{background:#fbfcff;color:var(--ink)}input:focus,select:focus,textarea:focus{outline:0;border-color:#69b1ff;box-shadow:0 0 0 3px #1677ff15;background:white}textarea{height:210px;resize:vertical;font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;line-height:1.6}
+    button{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:650;cursor:pointer;box-shadow:0 2px 5px #344b5f18}button:hover{background:var(--accent-hover);transform:translateY(-1px)}button:active{transform:translateY(0)}.secondary{background:#fff;color:#404851;border-color:#d5d9d7;box-shadow:none}.secondary:hover{background:#f4f5f4}.danger{background:#fff;color:var(--danger);border-color:#e4caca;box-shadow:none}.danger:hover{background:#fbf3f3}
+    .customers{max-height:calc(100vh - 240px);overflow:auto;padding-right:3px;margin-top:13px}.customer{padding:13px 14px;border:1px solid transparent;border-radius:11px;margin:5px 0;cursor:pointer;position:relative}.customer:before{content:"";position:absolute;left:0;top:11px;bottom:11px;width:3px;border-radius:3px;background:transparent}.customer:hover{background:var(--soft)}.customer.active{background:#e6f4ff;border-color:#bae0ff;color:#0958d9}.customer.active:before{background:var(--accent)}.customer b{font-size:13.5px}.customer .muted{font-size:11.5px;margin-top:3px;display:inline-block}
+    .workspace{min-width:0}.notice{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:10px;background:#f4f1e9;border:1px solid #e8e1cf;margin-bottom:20px;font-size:12.5px;color:#665f4f}.notice:before{content:"i";flex:0 0 20px;height:20px;border:1px solid #9a8d70;border-radius:50%;display:grid;place-items:center;font:700 12px Georgia}
+    .toolbar{display:grid;grid-template-columns:minmax(180px,1.6fr) 1fr 1fr;gap:9px;margin:16px 0}.toolbar>*{margin:0;min-height:40px}.scroll{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:11px;background:#fff;min-height:90px}
+    table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{text-align:left;border-bottom:1px solid #edf0f5;padding:11px 12px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}th{color:#657184;background:#f5f8ff;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;position:sticky;top:0}tbody tr{cursor:pointer}tbody tr:hover{background:#eaf4ff}tbody tr:last-child td{border-bottom:0}.scroll>.muted{padding:18px}
+    .editor-head{display:flex;justify-content:space-between;align-items:end;margin-top:23px;margin-bottom:7px}.editor-hint{font-size:11.5px;color:var(--muted)}.muted{color:var(--muted)}#message{min-height:20px;margin:10px 1px 0;font-size:12.5px;font-weight:600}
+    @media(max-width:850px){header{padding:0 18px}.status{display:none}main{grid-template-columns:1fr;padding:16px}.sidebar{position:static}.customers{max-height:260px}.toolbar{grid-template-columns:1fr}.editor-head{align-items:start;flex-direction:column;gap:4px}}
+  </style>
+</head>
+<body><header><div class="brand"><div class="mark">CB</div><div><h1>Core Banking Admin</h1><p>Không gian quản trị dữ liệu mô phỏng</p></div></div><div class="status"><span class="dot"></span> Hệ thống đang hoạt động</div></header>
+<main>
+  <section class="panel sidebar"><div class="section-head"><div><div class="eyebrow">Danh mục</div><h2>Khách hàng</h2></div></div><button onclick="newCustomer()">＋ Thêm khách hàng</button><div id="customers" class="customers"></div></section>
+  <section class="panel workspace">
+    <div class="notice">Môi trường demo nội bộ · Thay đổi sẽ được ghi trực tiếp vào Mock Core Banking.</div>
+    <div class="eyebrow">Chi tiết dữ liệu</div><h2 id="title">Chọn một khách hàng</h2>
+    <div class="toolbar"><select id="resource" onchange="loadResource()"></select><button class="secondary" onclick="newItem()">+ Tạo bản ghi</button><button class="danger" onclick="deleteCustomer()">Xóa khách hàng</button></div>
+    <div id="content" class="scroll"></div>
+    <div class="editor-head"><div><div class="eyebrow">Chỉnh sửa</div><h2>Dữ liệu JSON</h2></div><span class="editor-hint">Chọn một dòng phía trên để chỉnh sửa</span></div><input id="itemId" placeholder="ID bản ghi · để trống khi tạo mới"><textarea id="editor" spellcheck="false" placeholder='{"customer_name":"Nguyễn Văn A", ...}'></textarea>
+    <div class="toolbar"><button onclick="save()">Lưu</button><button class="secondary" onclick="loadResource()">Làm mới</button><button class="danger" onclick="deleteItem()">Xóa bản ghi</button></div>
+    <p id="message" class="muted"></p>
+  </section>
+</main>
+<script>
+let selected=null, metadata={resources:{}};
+const resourceLabels={'accounts':'Tài khoản','transactions':'Giao dịch','recurring-events':'Thanh toán định kỳ','budgets':'Ngân sách','goals':'Mục tiêu tiết kiệm','reminders':'Nhắc nhở','overdraft-facilities':'Hạn mức thấu chi','term-deposits':'Tiền gửi kỳ hạn','m-sinh-loi-accounts':'M-Sinh lời','credit-cards':'Thẻ tín dụng','loan-offers':'Đề nghị vay'};
+const api=async(path,options={})=>{const r=await fetch('/api/'+path,options);if(!r.ok){let e;try{e=await r.json()}catch{e={detail:r.statusText}}throw new Error(typeof e.detail==='string'?e.detail:JSON.stringify(e.detail))}return r.status===204?null:r.json()};
+const body=v=>({headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});
+function msg(v,error=false){const n=document.getElementById('message');n.textContent=v;n.style.color=error?'#b00032':'#237447'}
+async function boot(){metadata=await api('metadata');const s=document.getElementById('resource');s.innerHTML='<option value="customer">Hồ sơ khách hàng</option>'+Object.keys(metadata.resources).map(x=>`<option value="${x}">${resourceLabels[x]||x}</option>`).join('');await customers()}
+async function customers(){const data=await api('customers');document.getElementById('customers').innerHTML=data.map(x=>`<div class="customer ${selected===x.customer_id?'active':''}" onclick="choose('${x.customer_id}')"><b>${x.customer_name}</b><br><span class="muted">${x.customer_id}</span></div>`).join('')}
+async function choose(id){selected=id;document.getElementById('title').textContent='Khách hàng '+id;await customers();await loadResource()}
+function table(items){if(!items.length)return '<p class="muted">Chưa có dữ liệu.</p>';const keys=Object.keys(items[0]);return '<table><thead><tr>'+keys.map(k=>`<th>${k}</th>`).join('')+'</tr></thead><tbody>'+items.map(x=>`<tr onclick='edit(${JSON.stringify(JSON.stringify(x))})'>`+keys.map(k=>`<td>${x[k]??''}</td>`).join('')+'</tr>').join('')+'</tbody></table>'}
+async function loadResource(){if(!selected)return;const r=document.getElementById('resource').value;const data=r==='customer'?await api('customers/'+selected):await api(`customers/${selected}/${r}`);document.getElementById('content').innerHTML=table(Array.isArray(data)?data:[data]);msg('Đã tải dữ liệu')}
+function edit(raw){const x=JSON.parse(raw),r=document.getElementById('resource').value,id=r==='customer'?'customer_id':metadata.resources[r].id_field;document.getElementById('itemId').value=x[id]||'';delete x[id];delete x.customer_id;document.getElementById('editor').value=JSON.stringify(x,null,2)}
+function newItem(){document.getElementById('itemId').value='';document.getElementById('editor').value='{}'}
+function newCustomer(){selected=null;document.getElementById('resource').value='customer';document.getElementById('title').textContent='Tạo khách hàng';newItem();document.getElementById('editor').value=JSON.stringify({customer_id:'C005',customer_name:'Khách hàng mới',monthly_income:20000000,salary_day:25,preferred_safe_balance:3000000,risk_preference:'BALANCED'},null,2)}
+async function save(){try{const r=document.getElementById('resource').value,id=document.getElementById('itemId').value,payload=JSON.parse(document.getElementById('editor').value);if(r==='customer'){if(!selected){const x=await api('customers',{method:'POST',...body(payload)});selected=x.customer_id}else await api('customers/'+selected,{method:'PATCH',...body(payload)})}else{const path=`customers/${selected}/${r}${id?'/'+id:''}`;await api(path,{method:id?'PATCH':'POST',...body(payload)})}await customers();await loadResource();msg('Lưu thành công')}catch(e){msg(e.message,true)}}
+async function deleteCustomer(){if(!selected||!confirm('Xóa khách hàng và toàn bộ dữ liệu liên quan?'))return;try{await api('customers/'+selected,{method:'DELETE'});selected=null;document.getElementById('content').innerHTML='';await customers();msg('Đã xóa khách hàng')}catch(e){msg(e.message,true)}}
+async function deleteItem(){const r=document.getElementById('resource').value,id=document.getElementById('itemId').value;if(r==='customer')return deleteCustomer();if(!id||!confirm('Xóa bản ghi này?'))return;try{await api(`customers/${selected}/${r}/${id}`,{method:'DELETE'});newItem();await loadResource();msg('Đã xóa bản ghi')}catch(e){msg(e.message,true)}}
+boot().catch(e=>msg(e.message,true));
+</script></body></html>

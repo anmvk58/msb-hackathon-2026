@@ -126,6 +126,27 @@ services:
       - "3000:80"
     restart: on-failure
 
+  core-banking-admin:
+    build:
+      context: ./core-banking-admin-service
+      dockerfile: Dockerfile
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      ADMIN_CORE_BANKING_BASE_URL: http://corebanking:8090
+      ADMIN_CORE_BANKING_TIMEOUT_SECONDS: "10"
+    depends_on:
+      corebanking:
+        condition: service_healthy
+    ports:
+      - "8100:8100"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
 volumes:
   corebanking-mysql-data:
   financial-radar-postgres-data:

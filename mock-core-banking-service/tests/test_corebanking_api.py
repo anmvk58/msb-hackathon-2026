@@ -57,7 +57,54 @@ def test_list_customers_returns_every_customer(core_client: TestClient) -> None:
         "C002",
         "C003",
         "C004",
+        "C005",
     ]
+
+
+def test_m_sinh_loi_activation_sweep_and_flexible_withdrawal(core_client: TestClient) -> None:
+    path = "/api/customers/C005/m-sinh-loi"
+    assert core_client.get(path).json() is None
+    headers = {"Idempotency-Key": "activate-c005-demo"}
+    created = core_client.post(path, json={"minimum_payment_balance": "5000000"}, headers=headers)
+    repeated = core_client.post(path, json={"minimum_payment_balance": "5000000"}, headers=headers)
+    assert created.status_code == repeated.status_code == 200
+    assert created.json() == repeated.json()
+    assert created.json()["balance"] == "25000000.00"
+    assert core_client.get("/api/customers/C005/accounts").json()[0]["available_balance"] == "5000000.00"
+
+    swept = core_client.post(path + "/sweep?demo_now=true")
+    assert swept.status_code == 200
+    assert swept.json()["balance"] == "25000000.00"
+    context = core_client.get("/api/customers/C005/financial-context").json()
+    assert context["accounts"][0]["available_balance"] == "5000000.00"
+    assert context["m_sinh_loi"]["minimum_payment_balance"] == "5000000.00"
+
+    withdrawn = core_client.post(path + "/withdraw", json={"amount": "3000000"})
+    assert withdrawn.status_code == 200
+    assert withdrawn.json()["balance"] == "22000000.00"
+    assert core_client.get("/api/customers/C005/accounts").json()[0]["available_balance"] == "8000000.00"
+
+
+def test_admin_manages_m_sinh_loi_resource(core_client: TestClient) -> None:
+    resource = "/api/admin/customers/C005/m-sinh-loi-accounts"
+    metadata = core_client.get("/api/admin/metadata").json()["resources"]["m-sinh-loi-accounts"]
+    assert metadata["id_field"] == "account_id"
+    assert "minimum_payment_balance" in metadata["fields"]
+
+    wrong_owner = core_client.post(resource, json={"payment_account_id": "A-C001", "minimum_payment_balance": "5000000"})
+    assert wrong_owner.status_code == 422
+    created = core_client.post(resource, json={"payment_account_id": "A-C005", "minimum_payment_balance": "5000000"})
+    assert created.status_code == 201
+    account_id = created.json()["account_id"]
+    assert core_client.post(resource, json={"payment_account_id": "A-C005", "minimum_payment_balance": "5000000"}).status_code == 409
+    assert core_client.get(resource).json()[0]["account_id"] == account_id
+    assert core_client.get("/api/admin/customers/C005/overview").json()["m-sinh-loi-accounts"][0]["account_id"] == account_id
+
+    updated = core_client.patch(f"{resource}/{account_id}", json={"minimum_payment_balance": "6000000", "sweep_hour": 16})
+    assert updated.status_code == 200
+    assert updated.json()["minimum_payment_balance"] == "6000000.00"
+    assert core_client.delete("/api/admin/customers/C005").status_code == 204
+    assert core_client.get(resource).status_code == 404
 
 
 def test_transaction_updates_balance_and_is_idempotent(
@@ -196,3 +243,45 @@ def test_customer_can_manage_financial_context(core_client: TestClient) -> None:
     assert context["customer"]["preferred_safe_balance"] == "4500000.00"
     assert any(item["name"] == "Tiền điện" for item in context["recurring_events"])
     assert any(item["goal_name"] == "Quỹ dự phòng" for item in context["active_goals"])
+
+
+def test_admin_customer_and_nested_resource_full_crud(core_client: TestClient) -> None:
+    created = core_client.post(
+        "/api/admin/customers",
+        json={
+            "customer_id": "C099",
+            "customer_name": "Demo Admin",
+            "monthly_income": "20000000",
+            "salary_day": 20,
+            "preferred_safe_balance": "3000000",
+            "risk_preference": "BALANCED",
+        },
+    )
+    assert created.status_code == 201
+
+    account = core_client.post(
+        "/api/admin/customers/C099/accounts",
+        json={
+            "account_id": "A-C099",
+            "account_type": "PAYMENT",
+            "available_balance": "5000000",
+            "currency": "VND",
+        },
+    )
+    assert account.status_code == 201
+    assert account.json()["account_id"] == "A-C099"
+
+    updated = core_client.patch(
+        "/api/admin/customers/C099/accounts/A-C099",
+        json={"available_balance": "6500000"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["available_balance"] == "6500000.00"
+
+    overview = core_client.get("/api/admin/customers/C099/overview")
+    assert overview.status_code == 200
+    assert overview.json()["accounts"][0]["available_balance"] == "6500000.00"
+
+    assert core_client.delete("/api/admin/customers/C099/accounts/A-C099").status_code == 204
+    assert core_client.delete("/api/admin/customers/C099").status_code == 204
+    assert core_client.get("/api/admin/customers/C099").status_code == 404

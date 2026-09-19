@@ -73,10 +73,16 @@ class MockLLMClient:
         candidate = context.get("grounded_candidate")
         if candidate is not None:
             return response_model.model_validate(candidate)
+        if response_model.__name__ == "ChatIntentDecision":
+            return response_model.model_validate({
+                "intent": "OTHER",
+                "reply": "Bản demo đang dùng LLM mô phỏng nên chưa thể hiểu ý định hội thoại này. Vui lòng cấu hình LLM để tư vấn tiếp.",
+            })
         plan = context.get("candidate_plan")
         if plan is None:
             raise ValueError("MockLLMClient requires candidate_plan context")
         alert_summaries = {
+            "IDLE_CASH": "Bạn có khoản tiền nhàn rỗi có thể cân nhắc tối ưu.",
             "CASHFLOW_RISK": "Số dư dự kiến có thể không đủ để duy trì mức an toàn.",
             "SPENDING_ANOMALY": "Một nhóm chi tiêu gần đây có dấu hiệu cần lưu ý.",
             "GOAL_DRIFT": "Tiến độ mục tiêu tài chính có thể chưa đạt như dự kiến.",
@@ -87,7 +93,7 @@ class MockLLMClient:
                 # The mock remains deterministic for local development. Real severity
                 # classification is performed by the configured LLM provider.
                 "risk_level": (
-                    "HIGH" if plan["problem"] == "CASHFLOW_RISK" else "MEDIUM"
+                    "HIGH" if plan["problem"] == "CASHFLOW_RISK" else "LOW" if plan["problem"] == "IDLE_CASH" else "MEDIUM"
                 ),
                 "alert_summary": alert_summaries.get(
                     plan["problem"], "Tình hình tài chính của bạn có một điểm cần lưu ý."

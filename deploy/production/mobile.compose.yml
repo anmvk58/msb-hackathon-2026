@@ -1,0 +1,9 @@
+services:
+  frontend-mobile:
+    build:
+      context: ../..
+      dockerfile: deploy/production/mobile.Dockerfile
+    env_file: ./mobile.env
+    ports:
+      - "${MOBILE_BIND_IP:-127.0.0.1}:3000:80"
+    restart: unless-stopped
