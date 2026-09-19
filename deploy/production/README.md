@@ -16,7 +16,7 @@ gốc repo tiếp tục phục vụ phát triển local.
 | --- | --- | --- | --- |
 | Cloud MySQL | DB Core Banking | 3306 (hoặc cổng provider) | Core Banking server |
 | Core Banking server | `corebanking` | IP private:8090 | Agent server, Mobile server |
-| Core Banking server | `core-banking-admin` | 127.0.0.1:8100 | SSH tunnel của quản trị viên |
+| Core Banking server | `core-banking-admin` | `ADMIN_BIND_IP`:8100 (mặc định 0.0.0.0) | Máy có thể kết nối tới Core server |
 | PostgreSQL server | `financial-radar-db` | IP private:5432 | Agent server |
 | Agent server | `financial-radar-agent` | IP private:8080 | Mobile server |
 | Agent server | `financial-radar-scheduler` | Không mở cổng | Core API, PostgreSQL, LLM |
@@ -89,14 +89,11 @@ DB; không dựa vào `create_all()` để thay cột. `CORE_BANKING_SEED_DEMO_O
 mặc định là `false` ở cấu hình này. Chỉ đặt `true` khi chủ ý nạp dữ liệu demo
 vào DB trống.
 
-Admin chỉ nghe trên loopback. Để truy cập từ máy quản trị:
-
-```bash
-ssh -L 8100:127.0.0.1:8100 user@core-server
-```
-
-Sau đó mở `http://127.0.0.1:8100` trên máy quản trị. Không mở cổng 8100 ra
-Internet khi chưa thêm xác thực và phân quyền.
+Admin mặc định nghe trên mọi IPv4 interface (`ADMIN_BIND_IP=0.0.0.0`).
+Mở TCP 8100 trong firewall/security group của Core server rồi truy cập
+`http://IP_PUBLIC_CORE_SERVER:8100`. Có thể thay `ADMIN_BIND_IP` bằng một IP
+cụ thể của server nếu chỉ muốn nghe trên interface đó. Admin hiện không có
+đăng nhập; bất kỳ ai kết nối được cổng 8100 đều có quyền quản trị dữ liệu demo.
 
 ### 4. Agent server
 

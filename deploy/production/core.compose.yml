@@ -24,7 +24,7 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ADMIN_CORE_BANKING_BASE_URL: http://corebanking:8090
     ports:
-      - "127.0.0.1:8100:8100"
+      - "${ADMIN_BIND_IP:-0.0.0.0}:8100:8100"
     depends_on:
       corebanking:
         condition: service_healthy
