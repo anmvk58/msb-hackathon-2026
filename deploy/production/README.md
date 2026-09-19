@@ -20,16 +20,15 @@ gốc repo tiếp tục phục vụ phát triển local.
 | PostgreSQL server | `financial-radar-db` | IP private:5432 | Agent server |
 | Agent server | `financial-radar-agent` | IP private:8080 | Mobile server |
 | Agent server | `financial-radar-scheduler` | Không mở cổng | Core API, PostgreSQL, LLM |
-| Mobile server | `frontend-mobile` | 127.0.0.1:3000 mặc định | HTTPS reverse proxy/load balancer |
+| Mobile server | `frontend-mobile` | 0.0.0.0:80 mặc định | Trình duyệt qua IP public |
 
 Các IP private mẫu trong file `.env.example` phải được thay bằng IP thực.
 Thiết lập security group/firewall tương ứng; không mở MySQL, PostgreSQL,
 Core API hoặc Agent API cho Internet. Mobile là điểm vào duy nhất của trình
-duyệt. HTTPS được kết thúc ở reverse proxy/load balancer phía trước Mobile;
-proxy chuyển tiếp tới `127.0.0.1:3000` trên cùng máy. Nếu load balancer ở máy
-khác, đặt `MOBILE_BIND_IP` thành IP private của Mobile server và chỉ cho phép
-load balancer truy cập cổng 3000. Ba đường kết nối máy với máy nên nằm trên
-mạng private/VPN; áp dụng TLS cho DB/API nếu đi qua mạng không tin cậy.
+duyệt. Mobile mặc định nghe trên cổng 80 của mọi IPv4 interface để truy cập
+qua `http://IP_PUBLIC_MOBILE_SERVER`. Cho phép TCP 80 ở firewall/security
+group. Ba đường kết nối máy với máy nên nằm trên mạng private/VPN; áp dụng
+TLS cho DB/API nếu đi qua mạng không tin cậy.
 
 ## Chuẩn bị chung
 
@@ -114,13 +113,13 @@ sách khách hàng từ Core API, quét theo chu kỳ và gọi sweep M-Sinh l�
 ```bash
 docker compose --env-file deploy/production/mobile.env -f deploy/production/mobile.compose.yml up -d --build
 docker compose --env-file deploy/production/mobile.env -f deploy/production/mobile.compose.yml ps
-curl -fsS http://127.0.0.1:3000/health
+curl -fsS http://127.0.0.1/health
 ```
 
 Ảnh production của Mobile dùng Nginx template để route `/api/core/` và
 `/api/agent/` tới hai server private. URL API không nằm trong JavaScript
-public. Proxy Mobile chặn `/api/core/api/admin/`. Đặt domain và chứng chỉ
-HTTPS tại load balancer/reverse proxy; cho phép proxy đi vào cổng 3000.
+public. Proxy Mobile chặn `/api/core/api/admin/`. Truy cập qua IP public bằng
+`http://IP_PUBLIC_MOBILE_SERVER` mà không cần ghi cổng trong URL.
 
 ## Kiểm tra sau triển khai
 

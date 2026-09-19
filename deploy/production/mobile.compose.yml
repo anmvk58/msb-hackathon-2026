@@ -5,5 +5,5 @@ services:
       dockerfile: deploy/production/mobile.Dockerfile
     env_file: ./mobile.env
     ports:
-      - "${MOBILE_BIND_IP:-127.0.0.1}:3000:80"
+      - "${MOBILE_BIND_IP:-0.0.0.0}:80:80"
     restart: unless-stopped
