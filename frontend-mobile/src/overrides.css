@@ -18,12 +18,15 @@ body{background:#e8e7e5;color:var(--mfirst-ink)}
 /* Premium dark-gold login from the M-First reference. */
 .login{position:relative;overflow:hidden;padding-bottom:28px;color:#fff;background-color:#6f5645;background-image:url('/assets/mfirst-login-bg.png');background-position:center top;background-size:cover;background-repeat:no-repeat}
 .login:before{content:none}.login>*{position:relative;z-index:1}
+.login .msb-logo img{filter:none}
 .hero-mark{height:142px;margin:16px auto 20px;width:180px}.hero-mark i{display:none}.hero-mark span{inset:0;display:grid;place-items:center;color:#efd28b;font-size:94px;text-shadow:0 0 16px #f8dca0,0 0 48px #d9a84a}
 .glass-card{margin:0 18px 14px;border:1px solid #f4d89b38;border-radius:17px;background:linear-gradient(145deg,#1b1715b8,#090d13b0);box-shadow:0 14px 40px #05080e38;backdrop-filter:blur(18px)}
 .login-card{padding:18px 16px}.login-card p{font-size:13px;color:#d7cbbb}.login-card h1{margin:4px 0 15px;font-size:18px;color:#fff}.login-card h1 span{color:var(--mfirst-gold-bright)}
 .customer-field{font-size:12px;color:#d8cbb8}.customer-field select{padding:12px 13px;border:1px solid #f0d4942e;border-radius:10px;background:#0b1015b8;color:#fff;font-size:13px}
+@media(max-width:699px){.customer-field{font-size:14px}.customer-field select{min-height:54px;padding:15px 18px;font-size:16px}.customer-field option{font-size:16px}}
 .msb-primary,.primary{min-height:44px;border-radius:9px;background:linear-gradient(100deg,#c99a48,#efd185);color:#1b1c1b;font-size:14px;font-weight:700;box-shadow:0 8px 22px #c5964530}
 .login-shortcuts{padding:11px 8px}.login-shortcuts button{color:#f5eee4;font-size:11px}.login-shortcuts i{color:var(--mfirst-gold-bright);background:#ffffff09;font-size:19px}
+.login-shortcuts i img{display:block;width:32px;height:32px;filter:brightness(0) saturate(100%) invert(83%) sepia(36%) saturate(487%) hue-rotate(349deg) brightness(101%) contrast(91%)}
 .promo{height:126px;margin:2px 18px 12px;border-color:#efd59c55;border-radius:16px;background:linear-gradient(120deg,#1a1614d9,#4d3425dd);color:#fff;box-shadow:0 12px 34px #07090d30}.promo span{color:#ead7b9;font-size:11px}.promo b{color:#edca80;font-size:17px}.promo small,.demo-caption{font-size:10px;color:#e3d5c3}.promo-phone{background:linear-gradient(#b58a43,#f0d18d);color:#151515}.promo-watch{background:#c39b56}.demo-caption{display:block;margin-top:5px}
 
 /* Photographic private-banking home surface. */
@@ -58,7 +61,7 @@ body{background:#e8e7e5;color:var(--mfirst-ink)}
 .app{background-color:#07131d;background-image:url('/assets/mfirst-home-bg.png');background-position:center top;background-size:100% auto;background-repeat:no-repeat;background-attachment:scroll}
 .app .statusbar,.app .msb-header{position:relative;z-index:4}
 .app .statusbar{color:#fff;text-shadow:0 1px 4px #0008}
-.app .msb-logo img{width:78px;filter:brightness(0) saturate(100%) invert(81%) sepia(39%) saturate(606%) hue-rotate(354deg) brightness(92%) contrast(86%) drop-shadow(0 1px 4px #0008)}
+.app .msb-logo img{width:100px;filter:none}.app .msb-logo .inner-logo{display:none}
 .app .header-tools{gap:6px}.app .bell,.app .lang{height:34px;border:1px solid #e5c98266;background:#15202a99;color:#f6e5bd;box-shadow:inset 0 1px #ffffff15}.app .bell{width:34px;padding:7px}.app .bell svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.app .bell small{right:-1px;top:-3px;width:14px;height:14px;background:#b78b47;color:#fff}.app .lang{display:flex;align-items:center;gap:5px;padding:0 10px}.app .lang span{font-size:12px}.app .avatar{display:none}
 #home{min-height:calc(100vh - 100px);padding-top:238px}.home-greeting,#home>.radar-banner,#home>.heading,#home>#recent{display:none}
 #home .glass-card{border:1px solid #d5b46c55;background:linear-gradient(135deg,#0c1824d9,#06111bd1);box-shadow:0 12px 30px #0005;backdrop-filter:blur(13px)}
@@ -87,30 +90,33 @@ body{background:#e8e7e5;color:var(--mfirst-ink)}
 #home .service-grid footer svg{width:23px;height:23px;fill:none;stroke:#d4ae60;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
 .app nav{grid-template-columns:repeat(4,1fr);bottom:15px;height:70px;width:min(calc(100% - 38px),402px);padding:5px 7px;border-radius:20px;background:#17191bd9;border-color:#d6b56878;box-shadow:0 12px 28px #0008;backdrop-filter:blur(18px)}
 .app nav button{justify-content:center;gap:3px;border-radius:15px;color:#dedede;font-size:11px;font-weight:500}.app nav svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.55;stroke-linecap:round;stroke-linejoin:round}.app nav .active{background:#d5b46c22;color:#d9b66d}
-.app:has(.content-page.active){background:linear-gradient(180deg,#fff9f3,#f2e6db);color:var(--mfirst-ink)}.app:has(.content-page.active) .msb-logo img{filter:none}.app:has(.content-page.active) .lang{display:none}.app:has(.content-page.active) .avatar{display:grid}
+.app:has(.content-page.active){background:linear-gradient(180deg,#fff9f3,#f2e6db);color:var(--mfirst-ink)}.app:has(.content-page.active) .msb-logo .home-logo{display:none}.app:has(.content-page.active) .msb-logo .inner-logo{display:block;filter:none}.app:has(.content-page.active) .lang{display:none}.app:has(.content-page.active) .avatar{display:grid}
 
 .success-result{text-align:center}.success-check{width:66px;height:66px;display:grid;place-items:center;margin:3px auto 15px;border-radius:50%;background:linear-gradient(145deg,#37bd78,#168d55);box-shadow:0 10px 24px #168d5545,0 0 0 8px #39b97818;color:#fff}.success-check svg{width:34px;height:34px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.success-result h2{margin:6px auto 8px;max-width:310px;line-height:1.35}.success-message{margin:0 0 16px;color:#69737e;font-size:12px;line-height:1.55}.success-message strong{color:#178b56}.success-summary{overflow:hidden;border:1px solid #dfd8cd;border-radius:15px;background:#fff}.success-summary span{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-bottom:1px solid #eee6dc;color:#68727e;font-size:11px;text-align:left}.success-summary span:last-child{border-bottom:0}.success-summary strong{color:#142338;font-size:13px;text-align:right}.success-cta{width:100%;min-height:46px;margin-top:16px;border:0;border-radius:12px;font-size:13px;font-weight:800}
 
 @media(min-width:700px){body{padding:22px}.phone{min-height:calc(100vh - 44px);border:8px solid #111;border-radius:38px;overflow:hidden}.msb-screen{min-height:calc(100vh - 60px)}.app nav{bottom:37px}}
 .detail-copy{margin-top:10px;color:var(--mfirst-muted);font-size:13px;line-height:1.58}.detail-copy p{margin:0 0 9px}.detail-copy ul{margin:4px 0 11px;padding-left:20px}.detail-copy li{margin:5px 0}.detail-copy strong{color:var(--mfirst-ink);font-weight:800}
 .asset-page{background:linear-gradient(180deg,#f9e2dc,#e7d8cf)!important}.asset-page .title h2{font-size:27px}.asset-group{margin:14px 0;border-radius:17px;background:#fff;overflow:hidden;box-shadow:0 8px 20px #59341f10}.asset-head{width:100%;min-height:76px;display:grid;grid-template-columns:38px 1fr 24px;align-items:center;gap:8px;padding:15px 18px;border:0;background:#fff;color:#0b2448;text-align:left}.asset-head>span{font-size:25px}.asset-head b{display:block;font-size:17px}.asset-head small{display:block;margin-top:4px;color:#7a8797;font-size:11px}.asset-head i{font-style:normal;font-size:20px;transition:.2s}.asset-group.expanded .asset-head i{transform:rotate(180deg)}.asset-body{display:none;padding:0 18px 16px;border-top:1px solid #e7eaee}.asset-group.expanded .asset-body{display:block}.asset-row{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid #e7eaee}.asset-row h3{margin:0;color:#0b2448;font-size:15px}.asset-row small,.asset-row p{display:block;margin:4px 0;color:#6f7d8e;font-size:11px}.asset-row strong{display:block;margin-top:8px;color:#0b2448;font-size:18px}.asset-row>span{font-size:20px;color:#0b2448}.asset-link{width:100%;padding:14px;border:0;background:#fff;color:#f05b28;font-size:13px;font-weight:700}.asset-empty{color:#768294;font-size:12px}.deposit-card{margin:14px 0;padding:18px;border-radius:17px;background:linear-gradient(135deg,#10294d,#07162b);color:#fff;box-shadow:0 10px 25px #07172f2c}.deposit-card>small{color:#e1c278;font-size:11px}.deposit-card h3{margin:8px 0 18px;font-size:24px}.deposit-card>div{display:grid;grid-template-columns:1fr 1fr;gap:10px}.deposit-card span{color:#aeb9c8;font-size:10px}.deposit-card span strong{display:block;margin-top:4px;color:#fff;font-size:12px}.deposit-card p{margin:15px 0 0;padding-top:12px;border-top:1px solid #ffffff24;color:#d8e0e9;font-size:11px}
-/* Goal and recurring-payment sheets. */
-.modal>section:has(#goalForm,#recurringForm){padding:28px 22px 30px;background:linear-gradient(180deg,#fffdfa 0%,#f8f0e8 100%);box-shadow:0 -18px 50px #08111f30}
-.modal:has(#goalForm,#recurringForm) .eyebrow{color:#9b692e;font-size:11px;font-weight:800;letter-spacing:1.4px}
-.modal:has(#goalForm,#recurringForm) h2{margin:8px 0 20px;color:#17334d;font-size:24px;line-height:1.25;letter-spacing:-.4px}
-#goalForm,#recurringForm{display:flex;flex-direction:column;gap:15px}
-#goalForm .field,#recurringForm .field{margin:0;color:#40576b;font-size:12px;font-weight:700;line-height:1.5}
-#goalForm .field input,#goalForm .field select,#recurringForm .field input,#recurringForm .field select{display:block;width:100%;min-height:48px;margin-top:7px;padding:11px 14px;border:1.5px solid #d9d9d2;border-radius:12px;outline:none;background:#fff;color:#17334d;font-size:14px;font-weight:600;box-shadow:0 2px 8px #15334d08;transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease,transform .2s ease}
-#goalForm .field input:hover,#goalForm .field select:hover,#recurringForm .field input:hover,#recurringForm .field select:hover{border-color:#b99a65}
-#goalForm .field input:focus,#goalForm .field select:focus,#recurringForm .field input:focus,#recurringForm .field select:focus{border-color:#b88a46;background:#fffdf9;box-shadow:0 0 0 4px #d8ad6240,0 8px 20px #9f763121;transform:translateY(-1px)}
-#goalForm .field input::placeholder,#recurringForm .field input::placeholder{color:#8794a0}
-#goalForm .field input:disabled,#recurringForm .field input:disabled{background:#f1eee9;color:#718091;box-shadow:none}
+/* Shared form styling for goals, recurring payments, cash-flow settings, and payments. */
+.modal>section:has(:is(#goalForm,#recurringForm,#profileForm,#spendForm)){padding:28px 22px 30px;background:linear-gradient(180deg,#fffdfa 0%,#f8f0e8 100%);box-shadow:0 -18px 50px #08111f30}
+.modal:has(:is(#goalForm,#recurringForm,#profileForm,#spendForm)) .eyebrow{color:#9b692e;font-size:11px;font-weight:800;letter-spacing:1.4px}
+.modal:has(:is(#goalForm,#recurringForm,#profileForm,#spendForm)) h2{margin:8px 0 20px;color:#17334d;font-size:24px;line-height:1.25;letter-spacing:-.4px}
+.modal:has(:is(#profileForm,#spendForm)) h2{margin-bottom:8px}
+.modal:has(:is(#profileForm,#spendForm)) .modal-sub{margin:0 0 20px;color:#66788a;font-size:13px;line-height:1.55}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm){display:flex;flex-direction:column;gap:15px}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field{margin:0;color:#40576b;font-size:12px;font-weight:700;line-height:1.5}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field :is(input,select){display:block;width:100%;min-height:48px;margin-top:7px;padding:11px 14px;border:1.5px solid #d9d9d2;border-radius:12px;outline:none;background:#fff;color:#17334d;font-size:14px;font-weight:600;box-shadow:0 2px 8px #15334d08;transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease,transform .2s ease}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field :is(input,select):hover{border-color:#b99a65}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field :is(input,select):focus{border-color:#b88a46;background:#fffdf9;box-shadow:0 0 0 4px #d8ad6240,0 8px 20px #9f763121;transform:translateY(-1px)}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field input::placeholder{color:#8794a0}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field input:disabled{background:#f1eee9;color:#718091;box-shadow:none}
 #recurringForm .field small{display:block;margin:6px 2px 0;color:#718093;font-size:11px;font-weight:500}
-#goalForm>.primary,#recurringForm>.primary{align-self:center;width:min(100%,260px);min-height:48px;margin:10px auto 0;padding:11px 22px;border:0;border-radius:13px;background:linear-gradient(100deg,#c89748,#ebc77d);color:#173047;font-size:14px;font-weight:800;text-align:center;box-shadow:0 9px 22px #a77b3535;cursor:pointer;transition:transform .2s ease,box-shadow .2s ease,filter .2s ease}
-#goalForm>.primary:hover,#recurringForm>.primary:hover{filter:brightness(1.05);box-shadow:0 12px 25px #a77b3545;transform:translateY(-2px)}
-#goalForm>.primary:focus-visible,#recurringForm>.primary:focus-visible{outline:3px solid #a27637;outline-offset:3px}
-#goalForm>.primary:active,#recurringForm>.primary:active{transform:translateY(0)}
-@media(prefers-reduced-motion:reduce){#goalForm .field input,#goalForm .field select,#recurringForm .field input,#recurringForm .field select,#goalForm>.primary,#recurringForm>.primary{transition:none}}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm)>.primary{align-self:center;width:min(100%,260px);min-height:48px;margin:10px auto 0;padding:11px 22px;border:0;border-radius:13px;background:linear-gradient(100deg,#c89748,#ebc77d);color:#173047;font-size:14px;font-weight:800;text-align:center;box-shadow:0 9px 22px #a77b3535;cursor:pointer;transition:transform .2s ease,box-shadow .2s ease,filter .2s ease}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm)>.primary:hover{filter:brightness(1.05);box-shadow:0 12px 25px #a77b3545;transform:translateY(-2px)}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm)>.primary:focus-visible{outline:3px solid #a27637;outline-offset:3px}
+:is(#goalForm,#recurringForm,#profileForm,#spendForm)>.primary:active{transform:translateY(0)}
+@media(max-width:699px){:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field :is(input,select){font-size:16px}}
+@media(prefers-reduced-motion:reduce){:is(#goalForm,#recurringForm,#profileForm,#spendForm) .field :is(input,select),:is(#goalForm,#recurringForm,#profileForm,#spendForm)>.primary{transition:none}}
 
 #home .service-grid>button :is(.saving-icon,.lending-icon,.payment-icon,.qr-icon,.card-icon,.transfer-icon){display:block;width:32px;height:32px;flex:0 0 32px;background:#d4ae60}
 #home .service-grid>button .saving-icon{-webkit-mask:url('/assets/saving.svg') center/29px 29px no-repeat;mask:url('/assets/saving.svg') center/29px 29px no-repeat}
