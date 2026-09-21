@@ -68,6 +68,8 @@ frontend-mobile/
 core-banking-admin-service/
   admin_service/          REST facade and browser-based admin dashboard
   tests/                  Admin proxy tests
+pitch/                    14-slide web pitch deck and local presentation assets
+output/pdf/               Exported 16:9 PDF pitch deck
 docker-compose.yml        MySQL + both backend services + frontend
 ```
 
@@ -101,7 +103,7 @@ docker compose up --build -d
 Mobile Banking demo is at `http://localhost:3000`. Agent Swagger is at
 `http://localhost:8080/docs`; Core Banking Swagger is at `http://localhost:8090/docs`.
 Core Banking Admin is at `http://localhost:8100` (no authentication, demo only).
-Core Banking seeds C001-C004 once when its MySQL
+Core Banking seeds C001-C005 once when its MySQL
 database is empty.
 
 - `C001`: cashflow risk—25m income, 9m balance, 3m safe balance, upcoming 6m
@@ -110,6 +112,28 @@ database is empty.
 - `C003`: 100m/12-month goal with 22m progress around month four.
 - `C004`: upcoming 8m rent against 7.2m balance, demonstrating
   `UPCOMING_RECURRING → CASHFLOW_RISK`.
+- `C005`: 30m payment balance with low recent spending, demonstrating idle-cash
+  detection, a term-saving recommendation, conversational refinement to
+  M-Sinh lời, explicit confirmation, activation, sweep, and withdrawal.
+
+## Mobile demo and pitch deck
+
+The Mobile Banking Simulator includes five selectable demo profiles on the login
+screen. The current UI uses the MSB inverse logo on dark photographic headers,
+MSB shortcut icons, responsive demo-profile controls, two-line chat input, and a
+consistent modal style for scheduled payments, goals, cashflow actions, QR
+payments, and M-Sinh lời. The demo customer shown on the login screen is
+**Mai Văn An**.
+
+The hackathon presentation is maintained as a static web deck in `pitch/`. It
+contains 11 timed pitch slides and three appendix slides for the technology
+stack, deployed architecture, and team #GenWork. Open `pitch/index.html`
+directly or serve the repository and visit `http://localhost:3001/pitch/`.
+Detailed slide content and presenter controls are documented in
+[`pitch/README.md`](pitch/README.md).
+
+The exported 14-page, 16:9 PDF is stored at
+[`output/pdf/FinSen_Hackathon_Pitch_2026.pdf`](output/pdf/FinSen_Hackathon_Pitch_2026.pdf).
 
 ## C001 hero demo
 
@@ -124,7 +148,7 @@ POST /api/agent/run
 
 `as_of` is optional. Production and Mobile Banking flows omit it so the Agent
 uses the server's current date. Passing it explicitly is intended for
-reproducible tests, historical analysis, and the documented C001-C004 fixture.
+reproducible tests, historical analysis, and the documented C001-C005 fixture.
 
 The response contains `recommendation_id`. Select the immutable stored option
 without resending tool parameters:

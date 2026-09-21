@@ -31,7 +31,7 @@ from app.models import (
     SignalStatus,
     SignalType,
 )
-from app.policy import PolicyEngine
+from app.policy import PolicyDecision, PolicyEngine
 from app.tools import ToolRegistry, build_tool_registry
 
 
@@ -475,15 +475,62 @@ class LocalAgentRuntime(AgentRuntime):
         stored = session.get(AgentRecommendation, recommendation_id)
         if stored is None:
             raise ValueError(f"Unknown recommendation_id: {recommendation_id}")
-        if stored.status != RecommendationStatus.ACTIVE:
-            raise ValueError("Recommendation is no longer active")
-        if stored.expires_at is not None and datetime.utcnow() >= stored.expires_at:
+        if (
+            stored.status == RecommendationStatus.ACTIVE
+            and stored.expires_at is not None
+            and datetime.utcnow() >= stored.expires_at
+        ):
             stored.status = RecommendationStatus.EXPIRED
             session.commit()
             raise ValueError("Recommendation has expired; request a fresh recommendation")
         recommendation = RecommendationResult.model_validate(
             stored.recommendation_data["recommendation"]
         )
+        if stored.status == RecommendationStatus.SELECTED:
+            pending = session.scalar(
+                select(AgentActionLog)
+                .where(
+                    AgentActionLog.recommendation_id == recommendation_id,
+                    AgentActionLog.action_status == "PREPARED",
+                    AgentActionLog.confirmation_status == "PENDING",
+                )
+                .order_by(AgentActionLog.created_at.desc())
+                .limit(1)
+            )
+            if pending is None:
+                raise ValueError("Recommendation is no longer active")
+            option = next(
+                (item for item in recommendation.options if item.option_id == option_id),
+                None,
+            )
+            if option is None:
+                raise ValueError(f"Unknown recommendation option: {option_id}")
+            arguments = self.registry.validate_input(
+                option.action_type, option.parameters
+            ).model_dump(mode="json")
+            if (
+                pending.tool_name == option.action_type
+                and pending.tool_input == arguments
+            ):
+                return RadarState(
+                    customer_id=stored.customer_id,
+                    state=AgentLifecycle.WAITING_CONFIRMATION,
+                    recommendation_id=stored.recommendation_id,
+                    recommendation=recommendation,
+                    signals=([{"signal_id": stored.signal_id}] if stored.signal_id else []),
+                    selected_action=option_id,
+                    action_id=pending.action_id,
+                    action_draft=ActionDraft(
+                        tool=pending.tool_name, arguments=pending.tool_input
+                    ),
+                    policy_result=PolicyDecision.model_validate(pending.policy_result),
+                    confirmation_status="PENDING",
+                )
+            pending.confirmation_status = "DECLINED"
+            pending.action_status = "CANCELLED"
+            session.commit()
+        elif stored.status != RecommendationStatus.ACTIVE:
+            raise ValueError("Recommendation is no longer active")
         state = RadarState(
             customer_id=stored.customer_id,
             state=AgentLifecycle.RECOMMENDATION_READY,

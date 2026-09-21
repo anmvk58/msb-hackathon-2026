@@ -111,6 +111,13 @@ def test_agent_confirmation_e2e(session: Session) -> None:
                 "option_id": "A",
             },
         )
+        reopened = client.post(
+            "/api/agent/select",
+            json={
+                "recommendation_id": recommendation.json()["recommendation_id"],
+                "option_id": "A",
+            },
+        )
         action_id = waiting.json()["action_id"]
         before = client.get(f"/api/agent/actions/{action_id}")
         confirmed = client.post(
@@ -125,6 +132,8 @@ def test_agent_confirmation_e2e(session: Session) -> None:
     assert recommendation.json()["alert_summary"]
     assert len(recommendation.json()["alert_summary"]) <= 100
     assert waiting.json()["state"] == "WAITING_CONFIRMATION"
+    assert reopened.status_code == 200
+    assert reopened.json()["action_id"] == action_id
     assert waiting.json()["confirmation"]["required"] is True
     assert before.json()["action_status"] == "PREPARED"
     assert before.json()["tool_output"] is None

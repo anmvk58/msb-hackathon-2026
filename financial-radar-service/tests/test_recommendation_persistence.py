@@ -113,6 +113,46 @@ def test_action_log_contains_recommendation_id(session: Session) -> None:
     assert log.signal_id is not None
 
 
+def test_reselect_pending_option_reopens_same_action(session: Session) -> None:
+    runtime = LocalAgentRuntime()
+    recommendation = _recommend(runtime, session)
+    first = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="A"
+    )
+
+    reopened = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="A"
+    )
+
+    assert reopened.state == AgentLifecycle.WAITING_CONFIRMATION
+    assert reopened.action_id == first.action_id
+    assert reopened.confirmation_status == "PENDING"
+    assert session.scalar(
+        select(func.count()).select_from(AgentActionLog).where(
+            AgentActionLog.recommendation_id == recommendation.recommendation_id,
+            AgentActionLog.action_type != "TOOL_CALL",
+        )
+    ) == 1
+
+
+def test_switch_option_cancels_previous_pending_action(session: Session) -> None:
+    runtime = LocalAgentRuntime()
+    recommendation = _recommend(runtime, session)
+    first = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="A"
+    )
+
+    second = runtime.select(
+        session, recommendation_id=recommendation.recommendation_id, option_id="B"
+    )
+
+    old_log = session.get(AgentActionLog, first.action_id)
+    assert second.state in {AgentLifecycle.WAITING_CONFIRMATION, AgentLifecycle.MONITORING}
+    assert second.action_id != first.action_id
+    assert old_log.action_status == "CANCELLED"
+    assert old_log.confirmation_status == "DECLINED"
+
+
 def test_confirmation_uses_previously_persisted_tool_parameters(session: Session, fake_banking_gateway: FakeBankingGateway) -> None:
     runtime = LocalAgentRuntime()
     recommendation = _recommend(runtime, session)
